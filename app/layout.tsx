@@ -1,9 +1,8 @@
-import type { Metadata } from 'next'
 import './globals.css'
 
-export const metadata: Metadata = {
-  title: 'Codebook - SSH Manager',
-  description: 'Manage your SSH hosts and sessions',
+export const metadata = {
+  title: 'Codebook',
+  description: 'SSH Host Manager',
 }
 
 export default function RootLayout({

@@ -1,3 +1,163 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  background-color: #1a1a2e;
+  color: #eee;
+  min-height: 100vh;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.content {
+  flex: 1;
+  max-width: 800px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 30px 20px 100px;
+}
+
+.title {
+  font-size: 1.75rem;
+  margin-bottom: 20px;
+  color: #fff;
+}
+
+.panel {
+  background: #16213e;
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.host-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.host-btn {
+  padding: 16px 12px;
+  background: #1a1a2e;
+  border: 1px solid #2a2a4a;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.host-btn:hover {
+  background: #2a2a4a;
+  border-color: #4a4a8a;
+}
+
+.host-btn.local {
+  border-color: #4a4a8a;
+  background: #1f1f3a;
+}
+
+.host-btn.add {
+  border: 2px dashed #3a3a5a;
+  background: transparent;
+  color: #666;
+}
+
+.host-btn.add:hover {
+  border-color: #5a5a8a;
+  color: #fff;
+  background: #2a2a4a;
+}
+
+.empty-state {
+  text-align: center;
+  color: #666;
+  padding: 40px;
+}
+
+/* Settings */
+.settings-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 0;
+  border-bottom: 1px solid #2a2a4a;
+}
+
+.settings-item:last-child {
+  border-bottom: none;
+}
+
+.settings-label {
+  color: #fff;
+  font-weight: 500;
+}
+
+.settings-value {
+  color: #888;
+  font-size: 0.9rem;
+}
+
+/* Bottom Navigation */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-around;
+  background: #0f0f23;
+  border-top: 1px solid #2a2a4a;
+  padding: 10px 0;
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
+}
+
+.nav-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  padding: 8px 20px;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.nav-btn:hover {
+  color: #aaa;
+  background: #1a1a2e;
+}
+
+.nav-btn.active {
+  color: #fff;
+}
+
+.nav-btn.active .nav-icon {
+  transform: scale(1.1);
+}
+
+.nav-icon {
+  font-size: 1.5rem;
+  transition: transform 0.2s;
+}
+
+.nav-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+}

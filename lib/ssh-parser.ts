@@ -1,47 +1,64 @@
-import { readFileSync } from 'fs';
-import { homedir } from 'os';
-import { join } from 'path';
+import { readFileSync, existsSync } from 'fs'
+import { homedir } from 'os'
+import { join } from 'path'
 
 export interface SSHHost {
-  name: string;
-  hostname?: string;
-  user?: string;
+  name: string
+  hostname?: string
+  user?: string
+  port?: string
 }
 
 export function parseSSHConfig(): SSHHost[] {
-  try {
-    const configPath = join(homedir(), '.ssh', 'config');
-    const content = readFileSync(configPath, 'utf-8');
-    
-    const hosts: SSHHost[] = [];
-    const lines = content.split('\n');
-    let currentHost: SSHHost | null = null;
-    
-    for (const line of lines) {
-      const trimmed = line.trim();
-      
-      if (trimmed.startsWith('Host ')) {
-        if (currentHost) {
-          hosts.push(currentHost);
-        }
-        const hostName = trimmed.substring(5).trim();
-        currentHost = { name: hostName };
-      } else if (currentHost) {
-        if (trimmed.startsWith('HostName ')) {
-          currentHost.hostname = trimmed.substring(9).trim();
-        } else if (trimmed.startsWith('User ')) {
-          currentHost.user = trimmed.substring(5).trim();
-        }
+  const configPath = join(homedir(), '.ssh', 'config')
+
+  if (!existsSync(configPath)) {
+    return []
+  }
+
+  const content = readFileSync(configPath, 'utf-8')
+  const lines = content.split('\n')
+  const hosts: SSHHost[] = []
+  let currentHost: SSHHost | null = null
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+
+    if (trimmed.startsWith('#') || trimmed === '') {
+      continue
+    }
+
+    const [key, ...valueParts] = trimmed.split(/\s+/)
+    const value = valueParts.join(' ')
+
+    if (key.toLowerCase() === 'host') {
+      if (currentHost) {
+        hosts.push(currentHost)
+      }
+      // Skip wildcard hosts
+      if (value !== '*') {
+        currentHost = { name: value }
+      } else {
+        currentHost = null
+      }
+    } else if (currentHost) {
+      switch (key.toLowerCase()) {
+        case 'hostname':
+          currentHost.hostname = value
+          break
+        case 'user':
+          currentHost.user = value
+          break
+        case 'port':
+          currentHost.port = value
+          break
       }
     }
-    
-    if (currentHost) {
-      hosts.push(currentHost);
-    }
-    
-    return hosts;
-  } catch (error) {
-    console.error('Error reading SSH config:', error);
-    return [];
   }
+
+  if (currentHost) {
+    hosts.push(currentHost)
+  }
+
+  return hosts
 }
