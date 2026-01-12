@@ -209,9 +209,7 @@ export default function FileExplorer({
         <button className="icon-btn" onClick={goUp} disabled={currentPath === '/'} title="Go up">
           <UpIcon />
         </button>
-        <button className="icon-btn" onClick={selectThisFolder} title="Select this folder as workspace">
-          <CheckIcon />
-        </button>
+        <div className="header-spacer" />
         <button
           className="icon-btn"
           onClick={() => {
@@ -222,6 +220,9 @@ export default function FileExplorer({
           title="New file/folder"
         >
           <PlusIcon />
+        </button>
+        <button className="select-folder-btn" onClick={selectThisFolder}>
+          Select Folder
         </button>
       </div>
 
@@ -369,6 +370,29 @@ export default function FileExplorer({
         .icon-btn:disabled {
           opacity: 0.3;
           cursor: not-allowed;
+        }
+        .header-spacer {
+          flex: 1;
+        }
+        .select-folder-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 6px 12px;
+          background: #4a7c59;
+          border: none;
+          color: #fff;
+          border-radius: 6px;
+          cursor: pointer;
+          font-size: 0.8rem;
+          font-weight: 500;
+          white-space: nowrap;
+        }
+        .select-folder-btn:hover {
+          background: #5a8c69;
+        }
+        .select-folder-btn:active {
+          background: #3a6c49;
         }
         .path-bar {
           padding: 6px 12px;
@@ -639,14 +663,6 @@ function UpIcon() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <line x1="12" y1="19" x2="12" y2="5" />
       <polyline points="5 12 12 5 19 12" />
-    </svg>
-  )
-}
-
-function CheckIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <polyline points="20 6 9 17 4 12" />
     </svg>
   )
 }

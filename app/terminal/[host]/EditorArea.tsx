@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState, useRef, useEffect } from 'react'
+import { useCallback, useState, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { useConnection } from './ConnectionContext'
 import type { OpenFile } from './page'
@@ -25,11 +25,6 @@ const MonacoEditor = dynamic(() => import('./MonacoEditor'), {
   ),
 })
 
-type ActionType = 'save' | 'undo' | 'redo'
-const ACTIONS: ActionType[] = ['save', 'undo', 'redo']
-const SWIPE_THRESHOLD = 30
-const BOTTOM_NAV_HEIGHT = 60
-
 interface EditorAreaProps {
   files: OpenFile[]
   activeIndex: number
@@ -53,45 +48,9 @@ export default function EditorArea({
 }: EditorAreaProps) {
   const { writeFile, connected } = useConnection()
   const [saving, setSaving] = useState(false)
-  const [keyboardHeight, setKeyboardHeight] = useState(0)
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
 
-  // Swipeable action bubble state
-  const [currentAction, setCurrentAction] = useState<ActionType>('save')
-  const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null)
-  const [isAnimating, setIsAnimating] = useState(false)
-
   const activeFile = activeIndex >= 0 && activeIndex < files.length ? files[activeIndex] : null
-
-  // Handle virtual keyboard on mobile
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-
-    const handleResize = () => {
-      // On iOS, window.innerHeight changes when keyboard appears
-      const viewportHeight = window.visualViewport?.height || window.innerHeight
-      const windowHeight = window.innerHeight
-      const keyboardH = windowHeight - viewportHeight
-      setKeyboardHeight(keyboardH > 0 ? keyboardH : 0)
-    }
-
-    // Use visualViewport API if available (better for mobile)
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', handleResize)
-      window.visualViewport.addEventListener('scroll', handleResize)
-    } else {
-      window.addEventListener('resize', handleResize)
-    }
-
-    return () => {
-      if (window.visualViewport) {
-        window.visualViewport.removeEventListener('resize', handleResize)
-        window.visualViewport.removeEventListener('scroll', handleResize)
-      } else {
-        window.removeEventListener('resize', handleResize)
-      }
-    }
-  }, [])
 
   const handleSave = useCallback(async () => {
     if (!activeFile) return
@@ -122,73 +81,6 @@ export default function EditorArea({
   const handleEditorMount = useCallback((editor: editor.IStandaloneCodeEditor) => {
     editorRef.current = editor
   }, [])
-
-  // Swipe handlers
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    const touch = e.touches[0]
-    setTouchStart({ x: touch.clientX, y: touch.clientY })
-  }, [])
-
-  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-    if (!touchStart) return
-
-    const touch = e.changedTouches[0]
-    const deltaX = touch.clientX - touchStart.x
-    const deltaY = touch.clientY - touchStart.y
-
-    // Check if swipe is significant enough
-    const absX = Math.abs(deltaX)
-    const absY = Math.abs(deltaY)
-
-    if (absX < SWIPE_THRESHOLD && absY < SWIPE_THRESHOLD) {
-      setTouchStart(null)
-      return
-    }
-
-    // Determine direction (use the dominant axis)
-    const currentIndex = ACTIONS.indexOf(currentAction)
-    let newIndex: number
-
-    if (absX >= absY) {
-      // Horizontal swipe
-      if (deltaX > 0) {
-        // Right swipe - next action
-        newIndex = (currentIndex + 1) % ACTIONS.length
-      } else {
-        // Left swipe - previous action
-        newIndex = (currentIndex - 1 + ACTIONS.length) % ACTIONS.length
-      }
-    } else {
-      // Vertical swipe
-      if (deltaY > 0) {
-        // Down swipe - next action
-        newIndex = (currentIndex + 1) % ACTIONS.length
-      } else {
-        // Up swipe - previous action
-        newIndex = (currentIndex - 1 + ACTIONS.length) % ACTIONS.length
-      }
-    }
-
-    setIsAnimating(true)
-    setCurrentAction(ACTIONS[newIndex])
-    setTimeout(() => setIsAnimating(false), 200)
-    setTouchStart(null)
-  }, [touchStart, currentAction])
-
-  // Execute current action
-  const handleActionClick = useCallback(() => {
-    switch (currentAction) {
-      case 'save':
-        handleSave()
-        break
-      case 'undo':
-        handleUndo()
-        break
-      case 'redo':
-        handleRedo()
-        break
-    }
-  }, [currentAction, handleSave, handleUndo, handleRedo])
 
   // No files open - show welcome screen
   if (files.length === 0) {
@@ -284,22 +176,30 @@ export default function EditorArea({
           />
         )}
 
-        {/* Swipeable action bubble */}
+        {/* Floating action buttons - top right */}
         {activeFile && (
-          <div className="floating-actions" style={{ bottom: keyboardHeight + BOTTOM_NAV_HEIGHT + 16 }}>
+          <div className="floating-actions">
             <button
-              className={`action-bubble swipeable ${currentAction} ${isAnimating ? 'animating' : ''} ${currentAction === 'save' && activeFile.isModified ? 'modified' : ''}`}
-              onClick={handleActionClick}
-              onTouchStart={handleTouchStart}
-              onTouchEnd={handleTouchEnd}
-              disabled={currentAction === 'save' && (saving || !activeFile.isModified)}
-              title={currentAction.charAt(0).toUpperCase() + currentAction.slice(1)}
+              className="action-btn"
+              onClick={handleUndo}
+              title="Undo"
             >
-              <div className={`icon-wrapper ${isAnimating ? 'fade' : ''}`}>
-                {currentAction === 'save' && (saving ? <LoadingIcon /> : <SaveIcon />)}
-                {currentAction === 'undo' && <UndoIcon />}
-                {currentAction === 'redo' && <RedoIcon />}
-              </div>
+              <UndoIcon />
+            </button>
+            <button
+              className="action-btn"
+              onClick={handleRedo}
+              title="Redo"
+            >
+              <RedoIcon />
+            </button>
+            <button
+              className={`action-btn save ${activeFile.isModified ? 'modified' : ''}`}
+              onClick={handleSave}
+              disabled={saving || !activeFile.isModified}
+              title="Save"
+            >
+              {saving ? <LoadingIcon /> : <SaveIcon />}
             </button>
           </div>
         )}
@@ -384,63 +284,44 @@ export default function EditorArea({
         }
         .floating-actions {
           position: absolute;
-          right: 16px;
+          top: 12px;
+          right: 12px;
           display: flex;
+          gap: 8px;
           z-index: 100;
-          transition: bottom 0.15s ease-out;
         }
-        .action-bubble {
+        .action-btn {
           display: flex;
           align-items: center;
           justify-content: center;
-          width: 48px;
-          height: 48px;
-          background: #2a2a4a;
+          width: 36px;
+          height: 36px;
+          background: rgba(30, 30, 46, 0.9);
           border: 1px solid #3a3a6a;
           color: #aaa;
-          border-radius: 50%;
+          border-radius: 8px;
           cursor: pointer;
-          transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
-          box-shadow: 0 2px 12px rgba(0,0,0,0.4);
-          touch-action: none;
-          -webkit-user-select: none;
-          user-select: none;
+          transition: all 0.15s ease;
+          backdrop-filter: blur(4px);
         }
-        .action-bubble:hover:not(:disabled) {
+        .action-btn:hover:not(:disabled) {
           background: #3a3a6a;
           color: #fff;
-          transform: scale(1.05);
         }
-        .action-bubble:active:not(:disabled) {
+        .action-btn:active:not(:disabled) {
           transform: scale(0.95);
         }
-        .action-bubble:disabled {
+        .action-btn:disabled {
           opacity: 0.4;
           cursor: not-allowed;
         }
-        .action-bubble.save {
-          background: #3a3a5a;
-        }
-        .action-bubble.modified {
-          background: #4a7c59;
+        .action-btn.save.modified {
+          background: rgba(74, 124, 89, 0.9);
           border-color: #5a8c69;
           color: #fff;
         }
-        .action-bubble.modified:hover:not(:disabled) {
+        .action-btn.save.modified:hover:not(:disabled) {
           background: #5a8c69;
-        }
-        .action-bubble.animating {
-          transform: scale(0.9);
-        }
-        .icon-wrapper {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          transition: opacity 0.15s ease, transform 0.2s ease;
-        }
-        .icon-wrapper.fade {
-          opacity: 0;
-          transform: scale(0.8);
         }
       `}</style>
     </div>
