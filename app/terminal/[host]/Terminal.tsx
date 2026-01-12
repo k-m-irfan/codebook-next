@@ -1,21 +1,20 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useRef } from 'react'
 import { Terminal } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
 import 'xterm/css/xterm.css'
+import { useConnection } from './ConnectionContext'
 
 interface TerminalComponentProps {
   host: string
 }
 
 export default function TerminalComponent({ host }: TerminalComponentProps) {
-  const router = useRouter()
   const containerRef = useRef<HTMLDivElement>(null)
-  const [connected, setConnected] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [key, setKey] = useState(0)
+  const termRef = useRef<Terminal | null>(null)
+  const fitAddonRef = useRef<FitAddon | null>(null)
+  const { connected, error, sendTerminalData, sendResize, onTerminalData } = useConnection()
 
   useEffect(() => {
     const container = containerRef.current
@@ -41,7 +40,10 @@ export default function TerminalComponent({ host }: TerminalComponentProps) {
       },
     })
 
+    termRef.current = term
+
     const fitAddon = new FitAddon()
+    fitAddonRef.current = fitAddon
     term.loadAddon(fitAddon)
     term.open(terminalDiv)
 
@@ -50,48 +52,33 @@ export default function TerminalComponent({ host }: TerminalComponentProps) {
       if (!isCleanedUp) {
         try {
           fitAddon.fit()
+          sendResize(term.cols, term.rows)
         } catch (e) {
           // Ignore fit errors
         }
       }
     }, 100)
 
-    // Connect WebSocket
-    const wsUrl = `ws://${window.location.hostname}:3001?host=${encodeURIComponent(host)}`
-    console.log('Connecting to:', wsUrl)
-    const ws = new WebSocket(wsUrl)
-
-    ws.onopen = () => {
-      if (isCleanedUp) return
-      console.log('WebSocket connected')
-      setConnected(true)
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }))
+    // Subscribe to terminal data from the connection
+    const unsubscribe = onTerminalData((data) => {
+      if (!isCleanedUp) {
+        // Try to parse as JSON to filter out file responses
+        try {
+          const parsed = JSON.parse(data)
+          // If it's a file response, don't write to terminal
+          if (parsed.type?.startsWith('file:')) {
+            return
+          }
+        } catch {
+          // Not JSON, it's terminal data
+        }
+        term.write(data)
       }
-    }
+    })
 
-    ws.onmessage = (event) => {
-      if (isCleanedUp) return
-      term.write(event.data)
-    }
-
-    ws.onerror = () => {
-      if (isCleanedUp) return
-      setError('Connection error')
-    }
-
-    ws.onclose = (e) => {
-      if (isCleanedUp) return
-      console.log('WebSocket closed:', e.code)
-      setConnected(false)
-      term.write('\r\n\x1b[31mConnection closed\x1b[0m\r\n')
-    }
-
-    // Handle terminal input
+    // Handle terminal input - send to connection
     const dataDisposable = term.onData((data) => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(data)
-      }
+      sendTerminalData(data)
     })
 
     // Handle window resize
@@ -99,9 +86,7 @@ export default function TerminalComponent({ host }: TerminalComponentProps) {
       if (isCleanedUp) return
       try {
         fitAddon.fit()
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }))
-        }
+        sendResize(term.cols, term.rows)
       } catch (e) {
         // Ignore resize errors
       }
@@ -109,35 +94,41 @@ export default function TerminalComponent({ host }: TerminalComponentProps) {
 
     window.addEventListener('resize', handleResize)
 
+    // Also handle when the container becomes visible
+    const resizeObserver = new ResizeObserver(() => {
+      if (!isCleanedUp) {
+        try {
+          fitAddon.fit()
+          sendResize(term.cols, term.rows)
+        } catch (e) {
+          // Ignore fit errors
+        }
+      }
+    })
+    resizeObserver.observe(container)
+
     // Cleanup function
     return () => {
       isCleanedUp = true
       clearTimeout(fitTimeout)
       window.removeEventListener('resize', handleResize)
-
+      resizeObserver.disconnect()
+      unsubscribe()
       dataDisposable.dispose()
-
-      ws.onopen = null
-      ws.onmessage = null
-      ws.onerror = null
-      ws.onclose = null
-      ws.close()
-
       term.dispose()
+      termRef.current = null
+      fitAddonRef.current = null
 
       // Remove the terminal div completely
       if (terminalDiv.parentNode) {
         terminalDiv.parentNode.removeChild(terminalDiv)
       }
     }
-  }, [host, key])
+  }, [host, sendTerminalData, sendResize, onTerminalData])
 
   return (
-    <div className="terminal-page">
+    <div className="terminal-view">
       <div className="terminal-header">
-        <button className="back-btn" onClick={() => router.push('/')}>
-          ← Back
-        </button>
         <span className="terminal-title">{host}</span>
         <span className={`status ${connected ? 'connected' : ''}`}>
           {connected ? 'Connected' : 'Disconnected'}
@@ -147,39 +138,29 @@ export default function TerminalComponent({ host }: TerminalComponentProps) {
       <div ref={containerRef} className="terminal-container" />
 
       <style jsx>{`
-        .terminal-page {
+        .terminal-view {
           display: flex;
           flex-direction: column;
-          height: 100vh;
+          height: 100%;
           background: #1a1a2e;
+          padding-bottom: 60px;
         }
         .terminal-header {
           display: flex;
           align-items: center;
           gap: 15px;
-          padding: 12px 16px;
+          padding: 10px 16px;
           background: #0f0f23;
           border-bottom: 1px solid #2a2a4a;
-        }
-        .back-btn {
-          background: #2a2a4a;
-          border: none;
-          color: #fff;
-          padding: 8px 16px;
-          border-radius: 6px;
-          cursor: pointer;
-          font-size: 0.9rem;
-        }
-        .back-btn:hover {
-          background: #3a3a6a;
         }
         .terminal-title {
           flex: 1;
           color: #fff;
           font-weight: 600;
+          font-size: 0.95rem;
         }
         .status {
-          font-size: 0.8rem;
+          font-size: 0.75rem;
           color: #f66;
           padding: 4px 10px;
           background: rgba(255, 102, 102, 0.1);
@@ -190,14 +171,16 @@ export default function TerminalComponent({ host }: TerminalComponentProps) {
           background: rgba(102, 255, 102, 0.1);
         }
         .error {
-          padding: 10px;
-          background: #f66;
+          padding: 8px 16px;
+          background: #cc3333;
           color: #fff;
           text-align: center;
+          font-size: 0.85rem;
         }
         .terminal-container {
           flex: 1;
-          padding: 10px;
+          padding: 8px;
+          overflow: hidden;
         }
       `}</style>
     </div>

@@ -6,6 +6,7 @@ const pty = require('@homebridge/node-pty-prebuilt-multiarch')
 const { Client } = require('ssh2')
 const os = require('os')
 const fs = require('fs')
+const fsPromises = require('fs').promises
 const path = require('path')
 
 const dev = process.env.NODE_ENV !== 'production'
@@ -65,6 +66,338 @@ function getDefaultShell() {
   return process.env.SHELL || '/bin/sh'
 }
 
+// Format file stats to FileEntry
+function formatFileEntry(name, stats, parentPath) {
+  return {
+    name,
+    path: path.join(parentPath, name),
+    isDirectory: stats.isDirectory(),
+    size: stats.size,
+    modified: stats.mtime.toISOString(),
+  }
+}
+
+// Handle local file operations
+async function handleLocalFileOperation(ws, message) {
+  const { type, requestId } = message
+
+  try {
+    switch (type) {
+      case 'file:list': {
+        const dirPath = message.path || os.homedir()
+        const items = await fsPromises.readdir(dirPath, { withFileTypes: true })
+        const entries = await Promise.all(
+          items.map(async (item) => {
+            try {
+              const fullPath = path.join(dirPath, item.name)
+              const stats = await fsPromises.stat(fullPath)
+              return formatFileEntry(item.name, stats, dirPath)
+            } catch (err) {
+              // Skip files we can't stat
+              return null
+            }
+          })
+        )
+        ws.send(JSON.stringify({
+          type: 'file:list:response',
+          requestId,
+          success: true,
+          entries: entries.filter(Boolean),
+        }))
+        break
+      }
+
+      case 'file:read': {
+        const filePath = message.path
+        const stats = await fsPromises.stat(filePath)
+
+        // Check if file is too large (>5MB)
+        if (stats.size > 5 * 1024 * 1024) {
+          ws.send(JSON.stringify({
+            type: 'file:read:response',
+            requestId,
+            success: false,
+            error: 'File too large (>5MB)',
+          }))
+          break
+        }
+
+        const content = await fsPromises.readFile(filePath)
+        // Try to detect if binary
+        const isBinary = content.includes(0x00)
+
+        ws.send(JSON.stringify({
+          type: 'file:read:response',
+          requestId,
+          success: true,
+          content: isBinary ? content.toString('base64') : content.toString('utf8'),
+          encoding: isBinary ? 'base64' : 'utf8',
+          size: stats.size,
+        }))
+        break
+      }
+
+      case 'file:write': {
+        const filePath = message.path
+        const content = message.encoding === 'base64'
+          ? Buffer.from(message.content, 'base64')
+          : message.content
+        await fsPromises.writeFile(filePath, content)
+        ws.send(JSON.stringify({
+          type: 'file:operation:response',
+          requestId,
+          success: true,
+        }))
+        break
+      }
+
+      case 'file:create': {
+        const filePath = message.path
+        if (message.isDirectory) {
+          await fsPromises.mkdir(filePath, { recursive: true })
+        } else {
+          await fsPromises.writeFile(filePath, '')
+        }
+        ws.send(JSON.stringify({
+          type: 'file:operation:response',
+          requestId,
+          success: true,
+        }))
+        break
+      }
+
+      case 'file:delete': {
+        const filePath = message.path
+        if (message.recursive) {
+          await fsPromises.rm(filePath, { recursive: true, force: true })
+        } else {
+          const stats = await fsPromises.stat(filePath)
+          if (stats.isDirectory()) {
+            await fsPromises.rmdir(filePath)
+          } else {
+            await fsPromises.unlink(filePath)
+          }
+        }
+        ws.send(JSON.stringify({
+          type: 'file:operation:response',
+          requestId,
+          success: true,
+        }))
+        break
+      }
+
+      case 'file:rename': {
+        await fsPromises.rename(message.oldPath, message.newPath)
+        ws.send(JSON.stringify({
+          type: 'file:operation:response',
+          requestId,
+          success: true,
+        }))
+        break
+      }
+
+      default:
+        ws.send(JSON.stringify({
+          type: 'file:operation:response',
+          requestId,
+          success: false,
+          error: `Unknown file operation: ${type}`,
+        }))
+    }
+  } catch (err) {
+    ws.send(JSON.stringify({
+      type: 'file:operation:response',
+      requestId,
+      success: false,
+      error: err.message,
+    }))
+  }
+}
+
+// Handle SSH/SFTP file operations
+function handleSFTPFileOperation(ws, sftp, message) {
+  const { type, requestId } = message
+
+  switch (type) {
+    case 'file:list': {
+      const dirPath = message.path || '/home'
+      sftp.readdir(dirPath, (err, list) => {
+        if (err) {
+          ws.send(JSON.stringify({
+            type: 'file:list:response',
+            requestId,
+            success: false,
+            error: err.message,
+          }))
+          return
+        }
+        const entries = list.map((item) => ({
+          name: item.filename,
+          path: path.posix.join(dirPath, item.filename),
+          isDirectory: item.attrs.isDirectory(),
+          size: item.attrs.size,
+          modified: new Date(item.attrs.mtime * 1000).toISOString(),
+        }))
+        ws.send(JSON.stringify({
+          type: 'file:list:response',
+          requestId,
+          success: true,
+          entries,
+        }))
+      })
+      break
+    }
+
+    case 'file:read': {
+      const filePath = message.path
+      sftp.stat(filePath, (err, stats) => {
+        if (err) {
+          ws.send(JSON.stringify({
+            type: 'file:read:response',
+            requestId,
+            success: false,
+            error: err.message,
+          }))
+          return
+        }
+
+        // Check if file is too large (>5MB)
+        if (stats.size > 5 * 1024 * 1024) {
+          ws.send(JSON.stringify({
+            type: 'file:read:response',
+            requestId,
+            success: false,
+            error: 'File too large (>5MB)',
+          }))
+          return
+        }
+
+        sftp.readFile(filePath, (err, content) => {
+          if (err) {
+            ws.send(JSON.stringify({
+              type: 'file:read:response',
+              requestId,
+              success: false,
+              error: err.message,
+            }))
+            return
+          }
+
+          // Try to detect if binary
+          const isBinary = content.includes(0x00)
+
+          ws.send(JSON.stringify({
+            type: 'file:read:response',
+            requestId,
+            success: true,
+            content: isBinary ? content.toString('base64') : content.toString('utf8'),
+            encoding: isBinary ? 'base64' : 'utf8',
+            size: stats.size,
+          }))
+        })
+      })
+      break
+    }
+
+    case 'file:write': {
+      const filePath = message.path
+      const content = message.encoding === 'base64'
+        ? Buffer.from(message.content, 'base64')
+        : Buffer.from(message.content, 'utf8')
+
+      sftp.writeFile(filePath, content, (err) => {
+        ws.send(JSON.stringify({
+          type: 'file:operation:response',
+          requestId,
+          success: !err,
+          error: err?.message,
+        }))
+      })
+      break
+    }
+
+    case 'file:create': {
+      const filePath = message.path
+      if (message.isDirectory) {
+        sftp.mkdir(filePath, (err) => {
+          ws.send(JSON.stringify({
+            type: 'file:operation:response',
+            requestId,
+            success: !err,
+            error: err?.message,
+          }))
+        })
+      } else {
+        sftp.writeFile(filePath, '', (err) => {
+          ws.send(JSON.stringify({
+            type: 'file:operation:response',
+            requestId,
+            success: !err,
+            error: err?.message,
+          }))
+        })
+      }
+      break
+    }
+
+    case 'file:delete': {
+      const filePath = message.path
+      sftp.stat(filePath, (err, stats) => {
+        if (err) {
+          ws.send(JSON.stringify({
+            type: 'file:operation:response',
+            requestId,
+            success: false,
+            error: err.message,
+          }))
+          return
+        }
+
+        if (stats.isDirectory()) {
+          sftp.rmdir(filePath, (err) => {
+            ws.send(JSON.stringify({
+              type: 'file:operation:response',
+              requestId,
+              success: !err,
+              error: err?.message,
+            }))
+          })
+        } else {
+          sftp.unlink(filePath, (err) => {
+            ws.send(JSON.stringify({
+              type: 'file:operation:response',
+              requestId,
+              success: !err,
+              error: err?.message,
+            }))
+          })
+        }
+      })
+      break
+    }
+
+    case 'file:rename': {
+      sftp.rename(message.oldPath, message.newPath, (err) => {
+        ws.send(JSON.stringify({
+          type: 'file:operation:response',
+          requestId,
+          success: !err,
+          error: err?.message,
+        }))
+      })
+      break
+    }
+
+    default:
+      ws.send(JSON.stringify({
+        type: 'file:operation:response',
+        requestId,
+        success: false,
+        error: `Unknown file operation: ${type}`,
+      }))
+  }
+}
+
 app.prepare().then(() => {
   // Next.js HTTP server - handles all HTTP requests and HMR WebSocket
   const server = createServer(async (req, res) => {
@@ -81,7 +414,7 @@ app.prepare().then(() => {
     const hostName = parsedUrl.query.host
 
     if (hostName === 'local') {
-      // Local terminal
+      // Local terminal + file operations
       const shell = getDefaultShell()
       console.log(`Starting local terminal with shell: ${shell}`)
 
@@ -115,6 +448,9 @@ app.prepare().then(() => {
           const parsed = JSON.parse(msg)
           if (parsed.type === 'resize') {
             ptyProcess.resize(parsed.cols, parsed.rows)
+          } else if (parsed.type?.startsWith('file:')) {
+            // Handle file operations
+            handleLocalFileOperation(ws, parsed)
           }
         } catch {
           // Not JSON, treat as terminal input
@@ -127,7 +463,7 @@ app.prepare().then(() => {
       })
 
     } else {
-      // SSH connection
+      // SSH connection + SFTP file operations
       const hosts = parseSSHConfig()
       const hostConfig = hosts[hostName]
 
@@ -138,14 +474,20 @@ app.prepare().then(() => {
       }
 
       const conn = new Client()
+      let sftpSession = null
+      let shellStream = null
 
       conn.on('ready', () => {
+        console.log(`SSH connected to ${hostName}`)
+
         conn.shell({ term: 'xterm-256color' }, (err, stream) => {
           if (err) {
             ws.send(`\r\nError: ${err.message}\r\n`)
             ws.close()
             return
           }
+
+          shellStream = stream
 
           stream.on('data', (data) => {
             try {
@@ -159,24 +501,52 @@ app.prepare().then(() => {
             conn.end()
             ws.close()
           })
-
-          ws.on('message', (message) => {
-            const msg = message.toString()
-            try {
-              const parsed = JSON.parse(msg)
-              if (parsed.type === 'resize') {
-                stream.setWindow(parsed.rows, parsed.cols, 0, 0)
-              }
-            } catch {
-              stream.write(msg)
-            }
-          })
-
-          ws.on('close', () => {
-            stream.close()
-            conn.end()
-          })
         })
+      })
+
+      // Handle messages
+      ws.on('message', (message) => {
+        const msg = message.toString()
+        try {
+          const parsed = JSON.parse(msg)
+          if (parsed.type === 'resize') {
+            if (shellStream) {
+              shellStream.setWindow(parsed.rows, parsed.cols, 0, 0)
+            }
+          } else if (parsed.type?.startsWith('file:')) {
+            // Handle file operations via SFTP
+            if (!sftpSession) {
+              // Lazy-initialize SFTP session
+              conn.sftp((err, sftp) => {
+                if (err) {
+                  ws.send(JSON.stringify({
+                    type: 'file:operation:response',
+                    requestId: parsed.requestId,
+                    success: false,
+                    error: `SFTP error: ${err.message}`,
+                  }))
+                  return
+                }
+                sftpSession = sftp
+                handleSFTPFileOperation(ws, sftp, parsed)
+              })
+            } else {
+              handleSFTPFileOperation(ws, sftpSession, parsed)
+            }
+          }
+        } catch {
+          // Not JSON, treat as terminal input
+          if (shellStream) {
+            shellStream.write(msg)
+          }
+        }
+      })
+
+      ws.on('close', () => {
+        if (shellStream) {
+          shellStream.close()
+        }
+        conn.end()
       })
 
       conn.on('error', (err) => {
