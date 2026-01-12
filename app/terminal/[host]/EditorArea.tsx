@@ -189,7 +189,7 @@ export default function EditorArea({
           />
         )}
 
-        {/* Collapsible floating action buttons - top right */}
+        {/* Collapsible floating action buttons - bottom right */}
         {activeFile && (
           <div className={`floating-actions ${actionsExpanded ? 'expanded' : ''}`}>
             {actionsExpanded ? (
@@ -323,8 +323,8 @@ export default function EditorArea({
         }
         .floating-actions {
           position: absolute;
-          top: 12px;
           right: 12px;
+          bottom: 16px;
           display: flex;
           gap: 6px;
           z-index: 100;

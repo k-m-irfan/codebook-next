@@ -69,7 +69,6 @@ export default function TerminalPage() {
   // Handle workspace selection
   const handleSelectWorkspace = useCallback((path: string) => {
     setWorkspacePath(path)
-    setExplorerFullscreen(false)
   }, [])
 
   // Handle file open
