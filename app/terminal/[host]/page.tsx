@@ -1,10 +1,23 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, createContext, useContext } from 'react'
 import { useParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { ConnectionProvider } from './ConnectionContext'
 import BottomNav from './BottomNav'
+
+// Password context for sharing cached password across terminal tabs
+interface PasswordContextType {
+  password: string | null
+  setPassword: (password: string) => void
+}
+
+const PasswordContext = createContext<PasswordContextType>({
+  password: null,
+  setPassword: () => {},
+})
+
+export const usePassword = () => useContext(PasswordContext)
 
 const TerminalPanel = dynamic(() => import('./TerminalPanel'), {
   ssr: false,
@@ -50,6 +63,9 @@ export interface OpenFile {
 export default function TerminalPage() {
   const params = useParams()
   const host = params.host as string
+
+  // Cached password for this host session
+  const [cachedPassword, setCachedPassword] = useState<string | null>(null)
 
   // Workspace state
   const [workspacePath, setWorkspacePath] = useState<string>('')
@@ -160,7 +176,8 @@ export default function TerminalPage() {
 
   return (
     <ConnectionProvider host={host}>
-      <div className="session-container">
+      <PasswordContext.Provider value={{ password: cachedPassword, setPassword: setCachedPassword }}>
+        <div className="session-container">
         {/* Content area - above bottom nav */}
         <div className="content-area">
           {/* File Explorer - Fullscreen (always mounted, hidden when not active) */}
@@ -309,6 +326,7 @@ export default function TerminalPage() {
           }
         }
       `}</style>
+      </PasswordContext.Provider>
     </ConnectionProvider>
   )
 }

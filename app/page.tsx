@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 
 interface SSHHost {
@@ -16,17 +16,140 @@ export default function Home() {
   const router = useRouter()
   const [hosts, setHosts] = useState<SSHHost[]>([])
   const [activeTab, setActiveTab] = useState<Tab>('hosts')
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [newHost, setNewHost] = useState<SSHHost>({ name: '', hostname: '', user: '', port: '' })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  // Password prompt state
+  const [showPasswordModal, setShowPasswordModal] = useState(false)
+  const [passwordPrompt, setPasswordPrompt] = useState('')
+  const [passwordInput, setPasswordInput] = useState('')
+  const [connectingHost, setConnectingHost] = useState<string | null>(null)
+  const [connecting, setConnecting] = useState(false)
+  const wsRef = useRef<WebSocket | null>(null)
 
   const openTerminal = (host: string) => {
-    router.push(`/terminal/${encodeURIComponent(host)}`)
+    // Local terminal doesn't need password check
+    if (host === 'local') {
+      router.push(`/terminal/${encodeURIComponent(host)}`)
+      return
+    }
+
+    // Test SSH connection first
+    setConnecting(true)
+    setConnectingHost(host)
+
+    const wsUrl = `ws://${window.location.hostname}:3001?host=${encodeURIComponent(host)}`
+    const ws = new WebSocket(wsUrl)
+    wsRef.current = ws
+
+    ws.onmessage = (event) => {
+      try {
+        const parsed = JSON.parse(event.data)
+        if (parsed.type === 'auth:password-required') {
+          // Password needed - show modal
+          setConnecting(false)
+          const prompt = parsed.prompts?.[0]?.prompt || 'Password:'
+          setPasswordPrompt(prompt)
+          setShowPasswordModal(true)
+          return
+        }
+      } catch {
+        // Got terminal data - connection succeeded without password
+        ws.close()
+        setConnecting(false)
+        router.push(`/terminal/${encodeURIComponent(host)}`)
+      }
+    }
+
+    ws.onerror = () => {
+      setConnecting(false)
+      setConnectingHost(null)
+    }
+
+    ws.onclose = () => {
+      // If we're still connecting, it might have failed
+      if (connecting && !showPasswordModal) {
+        setConnecting(false)
+        setConnectingHost(null)
+      }
+    }
   }
 
-  useEffect(() => {
+  const handlePasswordSubmit = () => {
+    if (!passwordInput || !connectingHost || !wsRef.current) return
+
+    // Send password to server
+    wsRef.current.send(JSON.stringify({
+      type: 'auth:password',
+      password: passwordInput
+    }))
+
+    // Store password for the terminal page
+    sessionStorage.setItem(`ssh_password_${connectingHost}`, passwordInput)
+
+    // Close test connection and navigate
+    wsRef.current.close()
+    setShowPasswordModal(false)
+    setPasswordInput('')
+
+    router.push(`/terminal/${encodeURIComponent(connectingHost)}`)
+    setConnectingHost(null)
+  }
+
+  const handlePasswordCancel = () => {
+    if (wsRef.current) {
+      wsRef.current.close()
+    }
+    setShowPasswordModal(false)
+    setPasswordInput('')
+    setConnectingHost(null)
+  }
+
+  const fetchHosts = () => {
     fetch('/api/hosts')
       .then(res => res.json())
       .then(data => setHosts(data))
       .catch(err => console.error('Failed to fetch hosts:', err))
+  }
+
+  useEffect(() => {
+    fetchHosts()
   }, [])
+
+  const handleAddHost = async () => {
+    if (!newHost.name.trim()) {
+      setError('Host name is required')
+      return
+    }
+
+    setSaving(true)
+    setError('')
+
+    try {
+      const res = await fetch('/api/hosts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newHost),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        setError(data.error || 'Failed to add host')
+        return
+      }
+
+      setShowAddModal(false)
+      setNewHost({ name: '', hostname: '', user: '', port: '' })
+      fetchHosts()
+    } catch (err) {
+      setError('Failed to add host')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div className="app">
@@ -35,16 +158,16 @@ export default function Home() {
           <>
             <h1 className="title">Hosts</h1>
             <div className="panel">
-              <div className="host-grid">
+              <div className="host-list">
                 <button className="host-btn local" onClick={() => openTerminal('local')}>
                   Local
                 </button>
+                <button className="host-btn add" onClick={() => setShowAddModal(true)}>+ Add</button>
                 {hosts.map((host) => (
                   <button key={host.name} className="host-btn" onClick={() => openTerminal(host.name)}>
                     {host.name}
                   </button>
                 ))}
-                <button className="host-btn add">+ Add</button>
               </div>
             </div>
           </>
@@ -109,6 +232,111 @@ export default function Home() {
           <span className="nav-label">Settings</span>
         </button>
       </nav>
+
+      {/* Password Modal */}
+      {showPasswordModal && (
+        <div className="modal-overlay" onClick={handlePasswordCancel}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h2 className="modal-title">Authentication Required</h2>
+            <p style={{ color: '#888', marginBottom: '16px' }}>{passwordPrompt}</p>
+            <div className="form-group">
+              <input
+                type="password"
+                className="form-input"
+                placeholder="Enter password"
+                value={passwordInput}
+                onChange={e => setPasswordInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') handlePasswordSubmit()
+                  if (e.key === 'Escape') handlePasswordCancel()
+                }}
+                autoFocus
+              />
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-cancel" onClick={handlePasswordCancel}>
+                Cancel
+              </button>
+              <button className="btn btn-primary" onClick={handlePasswordSubmit}>
+                Connect
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Connecting Overlay */}
+      {connecting && (
+        <div className="modal-overlay">
+          <div className="modal" style={{ textAlign: 'center' }}>
+            <p style={{ color: '#fff' }}>Connecting to {connectingHost}...</p>
+          </div>
+        </div>
+      )}
+
+      {/* Add Host Modal */}
+      {showAddModal && (
+        <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h2 className="modal-title">Add SSH Host</h2>
+
+            {error && <div className="modal-error">{error}</div>}
+
+            <div className="form-group">
+              <label className="form-label">Name *</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="my-server"
+                value={newHost.name}
+                onChange={e => setNewHost({ ...newHost, name: e.target.value })}
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Hostname</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="192.168.1.100 or example.com"
+                value={newHost.hostname}
+                onChange={e => setNewHost({ ...newHost, hostname: e.target.value })}
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">User</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="root"
+                value={newHost.user}
+                onChange={e => setNewHost({ ...newHost, user: e.target.value })}
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Port</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="22"
+                value={newHost.port}
+                onChange={e => setNewHost({ ...newHost, port: e.target.value })}
+              />
+            </div>
+
+            <div className="modal-actions">
+              <button className="btn btn-cancel" onClick={() => setShowAddModal(false)}>
+                Cancel
+              </button>
+              <button className="btn btn-primary" onClick={handleAddHost} disabled={saving}>
+                {saving ? 'Adding...' : 'Add Host'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

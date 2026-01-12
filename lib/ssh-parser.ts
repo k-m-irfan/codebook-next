@@ -1,4 +1,4 @@
-import { readFileSync, existsSync } from 'fs'
+import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
 
@@ -61,4 +61,35 @@ export function parseSSHConfig(): SSHHost[] {
   }
 
   return hosts
+}
+
+export function addSSHHost(host: SSHHost): void {
+  const sshDir = join(homedir(), '.ssh')
+  const configPath = join(sshDir, 'config')
+
+  // Ensure .ssh directory exists
+  if (!existsSync(sshDir)) {
+    mkdirSync(sshDir, { mode: 0o700 })
+  }
+
+  // Build the new host entry
+  let entry = `\nHost ${host.name}\n`
+  if (host.hostname) {
+    entry += `  HostName ${host.hostname}\n`
+  }
+  if (host.user) {
+    entry += `  User ${host.user}\n`
+  }
+  if (host.port) {
+    entry += `  Port ${host.port}\n`
+  }
+
+  // Read existing config or start fresh
+  let existingContent = ''
+  if (existsSync(configPath)) {
+    existingContent = readFileSync(configPath, 'utf-8')
+  }
+
+  // Append new host
+  writeFileSync(configPath, existingContent + entry, { mode: 0o600 })
 }

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { Terminal } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
 import 'xterm/css/xterm.css'
+import { usePassword } from './page'
 
 interface TerminalTab {
   id: string
@@ -26,8 +27,23 @@ export default function TerminalPanel({
   workspacePath,
   isVisible = false,
 }: TerminalPanelProps) {
+  const { password: cachedPassword, setPassword: setCachedPassword } = usePassword()
+
+  // On mount, check sessionStorage for password from home page
+  useEffect(() => {
+    const storedPassword = sessionStorage.getItem(`ssh_password_${host}`)
+    if (storedPassword && !cachedPassword) {
+      setCachedPassword(storedPassword)
+      // Clear from sessionStorage after reading
+      sessionStorage.removeItem(`ssh_password_${host}`)
+    }
+  }, [host, cachedPassword, setCachedPassword])
   const [tabs, setTabs] = useState<TerminalTab[]>([])
   const [activeTabId, setActiveTabId] = useState<string | null>(null)
+  const [showPasswordModal, setShowPasswordModal] = useState(false)
+  const [passwordPrompt, setPasswordPrompt] = useState('')
+  const [passwordInput, setPasswordInput] = useState('')
+  const [pendingTabId, setPendingTabId] = useState<string | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const tabCounter = useRef(0)
   const lastWorkspacePath = useRef<string>('')
@@ -135,24 +151,10 @@ export default function TerminalPanel({
       const tabId = tab.id
 
       ws.onopen = () => {
+        console.log('WebSocket connected for tab:', tabId)
         setTabs(prev => prev.map(t =>
           t.id === tabId ? { ...t, connected: true } : t
         ))
-        setTimeout(() => {
-          try {
-            fitAddon.fit()
-            ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }))
-            // Auto cd to workspace directory for new terminals and clear
-            if (workspacePath) {
-              const cdCommand = workspacePath.includes(' ') ? `cd "${workspacePath}" && clear\n` : `cd ${workspacePath} && clear\n`
-              ws.send(cdCommand)
-            } else {
-              ws.send('clear\n')
-            }
-          } catch (e) {
-            // Ignore
-          }
-        }, 100)
       }
 
       ws.onclose = () => {
@@ -161,13 +163,56 @@ export default function TerminalPanel({
         ))
       }
 
+      let initialCommandsSent = false
+
+      const sendInitialCommands = () => {
+        if (initialCommandsSent) return
+        initialCommandsSent = true
+        setTimeout(() => {
+          try {
+            fitAddon.fit()
+            ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }))
+            if (workspacePath) {
+              const cdCommand = workspacePath.includes(' ') ? `cd "${workspacePath}" && clear\n` : `cd ${workspacePath} && clear\n`
+              ws.send(cdCommand)
+            } else {
+              ws.send('clear\n')
+            }
+          } catch (e) {
+            console.error('Error sending initial commands:', e)
+          }
+        }, 100)
+      }
+
       ws.onmessage = (event) => {
         const data = event.data
         try {
           const parsed = JSON.parse(data)
+          if (parsed.type === 'auth:password-required') {
+            // Server is asking for password
+            if (cachedPassword) {
+              // Use cached password automatically
+              console.log('Using cached password for', host)
+              ws.send(JSON.stringify({
+                type: 'auth:password',
+                password: cachedPassword
+              }))
+              return
+            }
+            // No cached password - show modal
+            console.log('Password required - showing modal')
+            const prompt = parsed.prompts?.[0]?.prompt || 'Password:'
+            setPasswordPrompt(prompt)
+            setPendingTabId(tabId)
+            setShowPasswordModal(true)
+            return
+          }
           if (parsed.type?.startsWith('file:')) return
         } catch {
-          // Not JSON - terminal data
+          // Not JSON - terminal data, connection is ready
+          if (!initialCommandsSent) {
+            sendInitialCommands()
+          }
         }
         term.write(data)
       }
@@ -196,7 +241,7 @@ export default function TerminalPanel({
         t.id === tabId ? { ...t, ws, term, fitAddon, containerEl: termDiv } : t
       ))
     })
-  }, [tabs, activeTabId, host, workspacePath])
+  }, [tabs, activeTabId, host, workspacePath, cachedPassword])
 
   // Change directory when workspace changes
   useEffect(() => {
@@ -233,6 +278,37 @@ export default function TerminalPanel({
   }, [isVisible, tabs])
 
   const activeTab = tabs.find(t => t.id === activeTabId)
+
+  const handlePasswordSubmit = useCallback(() => {
+    if (!pendingTabId || !passwordInput) return
+
+    const tab = tabs.find(t => t.id === pendingTabId)
+    if (tab?.ws?.readyState === WebSocket.OPEN) {
+      tab.ws.send(JSON.stringify({
+        type: 'auth:password',
+        password: passwordInput
+      }))
+      // Cache the password for future terminal tabs
+      setCachedPassword(passwordInput)
+    }
+
+    setShowPasswordModal(false)
+    setPasswordInput('')
+    setPendingTabId(null)
+  }, [pendingTabId, passwordInput, tabs, setCachedPassword])
+
+  const handlePasswordCancel = useCallback(() => {
+    // Close the connection if password is cancelled
+    if (pendingTabId) {
+      const tab = tabs.find(t => t.id === pendingTabId)
+      if (tab?.ws) {
+        tab.ws.close()
+      }
+    }
+    setShowPasswordModal(false)
+    setPasswordInput('')
+    setPendingTabId(null)
+  }, [pendingTabId, tabs])
 
   return (
     <div className="terminal-panel">
@@ -375,7 +451,103 @@ export default function TerminalPanel({
           padding: 4px;
           overflow: hidden;
         }
+        .password-modal-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.8);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+          padding: 20px;
+        }
+        .password-modal {
+          background: #16213e;
+          border-radius: 12px;
+          padding: 24px;
+          width: 100%;
+          max-width: 350px;
+        }
+        .password-modal h3 {
+          color: #fff;
+          margin: 0 0 16px;
+          font-size: 1.1rem;
+        }
+        .password-modal input {
+          width: 100%;
+          padding: 12px;
+          background: #1a1a2e;
+          border: 1px solid #2a2a4a;
+          border-radius: 6px;
+          color: #fff;
+          font-size: 1rem;
+          margin-bottom: 16px;
+        }
+        .password-modal input:focus {
+          outline: none;
+          border-color: #4a4a8a;
+        }
+        .password-modal-actions {
+          display: flex;
+          gap: 12px;
+        }
+        .password-modal-actions button {
+          flex: 1;
+          padding: 10px 16px;
+          border-radius: 6px;
+          font-size: 0.9rem;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+        .btn-cancel {
+          background: transparent;
+          border: 1px solid #3a3a5a;
+          color: #888;
+        }
+        .btn-cancel:hover {
+          background: #2a2a4a;
+          color: #fff;
+        }
+        .btn-submit {
+          background: #4a4a8a;
+          border: none;
+          color: #fff;
+        }
+        .btn-submit:hover {
+          background: #5a5a9a;
+        }
       `}</style>
+
+      {/* Password Modal */}
+      {showPasswordModal && (
+        <div className="password-modal-overlay" onClick={handlePasswordCancel}>
+          <div className="password-modal" onClick={e => e.stopPropagation()}>
+            <h3>{passwordPrompt}</h3>
+            <input
+              type="password"
+              placeholder="Enter password"
+              value={passwordInput}
+              onChange={e => setPasswordInput(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') handlePasswordSubmit()
+                if (e.key === 'Escape') handlePasswordCancel()
+              }}
+              autoFocus
+            />
+            <div className="password-modal-actions">
+              <button className="btn-cancel" onClick={handlePasswordCancel}>
+                Cancel
+              </button>
+              <button className="btn-submit" onClick={handlePasswordSubmit}>
+                Connect
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

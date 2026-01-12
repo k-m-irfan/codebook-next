@@ -473,9 +473,12 @@ app.prepare().then(() => {
         return
       }
 
-      const conn = new Client()
+      let conn = new Client()
       let sftpSession = null
       let shellStream = null
+
+      let pendingPassword = null
+      let passwordResolver = null
 
       conn.on('ready', () => {
         console.log(`SSH connected to ${hostName}`)
@@ -504,6 +507,21 @@ app.prepare().then(() => {
         })
       })
 
+      conn.on('keyboard-interactive', (name, instructions, instructionsLang, prompts, finish) => {
+        console.log(`Keyboard-interactive auth requested for ${hostName}`)
+
+        // Request password from client
+        ws.send(JSON.stringify({
+          type: 'auth:password-required',
+          prompts: prompts.map(p => ({ prompt: p.prompt, echo: p.echo }))
+        }))
+
+        // Wait for password from client
+        passwordResolver = (responses) => {
+          finish(responses)
+        }
+      })
+
       // Handle messages
       ws.on('message', (message) => {
         const msg = message.toString()
@@ -512,6 +530,12 @@ app.prepare().then(() => {
           if (parsed.type === 'resize') {
             if (shellStream) {
               shellStream.setWindow(parsed.rows, parsed.cols, 0, 0)
+            }
+          } else if (parsed.type === 'auth:password') {
+            // Handle password submission
+            if (passwordResolver) {
+              passwordResolver(parsed.responses || [parsed.password])
+              passwordResolver = null
             }
           } else if (parsed.type?.startsWith('file:')) {
             // Handle file operations via SFTP
@@ -542,23 +566,12 @@ app.prepare().then(() => {
         }
       })
 
-      ws.on('close', () => {
-        if (shellStream) {
-          shellStream.close()
-        }
-        conn.end()
-      })
-
-      conn.on('error', (err) => {
-        ws.send(`\r\nSSH Error: ${err.message}\r\n`)
-        ws.close()
-      })
-
       // Build connection config
       const connectConfig = {
         host: hostConfig.hostname || hostConfig.name,
         port: parseInt(hostConfig.port) || 22,
         username: hostConfig.user || os.userInfo().username,
+        tryKeyboard: true, // Enable keyboard-interactive for password fallback
       }
 
       // Try to find a working private key
@@ -586,6 +599,140 @@ app.prepare().then(() => {
         connectConfig.agent = process.env.SSH_AUTH_SOCK
         console.log(`Using SSH agent: ${process.env.SSH_AUTH_SOCK}`)
       }
+
+      let waitingForPassword = false
+
+      // Handle WebSocket close
+      ws.on('close', () => {
+        passwordResolver = null
+        if (shellStream) {
+          shellStream.close()
+        }
+        conn.end()
+      })
+
+      conn.on('ready', () => {
+        console.log(`SSH connected to ${hostName}`)
+
+        conn.shell({ term: 'xterm-256color' }, (err, stream) => {
+          if (err) {
+            ws.send(`\r\nError: ${err.message}\r\n`)
+            ws.close()
+            return
+          }
+
+          shellStream = stream
+
+          stream.on('data', (data) => {
+            try {
+              ws.send(data.toString())
+            } catch (e) {
+              // WebSocket closed
+            }
+          })
+
+          stream.on('close', () => {
+            conn.end()
+            ws.close()
+          })
+        })
+      })
+
+      // Handle keyboard-interactive auth - this is triggered when server asks for password
+      conn.on('keyboard-interactive', (name, instructions, instructionsLang, prompts, finish) => {
+        console.log(`Keyboard-interactive auth requested for ${hostName}`)
+
+        if (prompts.length > 0) {
+          waitingForPassword = true
+          ws.send(JSON.stringify({
+            type: 'auth:password-required',
+            prompts: prompts.map(p => ({ prompt: p.prompt, echo: p.echo }))
+          }))
+
+          // Wait for password from client and call finish
+          passwordResolver = (responses) => {
+            waitingForPassword = false
+            finish(responses)
+          }
+        } else {
+          finish([])
+        }
+      })
+
+      conn.on('error', (err) => {
+        console.log(`SSH error for ${hostName}:`, err.message)
+
+        // Check if this is an auth failure - prompt for password
+        const isAuthError = err.message.includes('All configured authentication methods failed') ||
+                           err.message.includes('authentication failed') ||
+                           err.level === 'client-authentication'
+
+        if (isAuthError && !waitingForPassword) {
+          // Auth failed, ask for password
+          console.log(`Auth failed for ${hostName}, requesting password`)
+          waitingForPassword = true
+          ws.send(JSON.stringify({
+            type: 'auth:password-required',
+            prompts: [{ prompt: `Password for ${connectConfig.username}@${connectConfig.host}:`, echo: false }]
+          }))
+
+          // Set up password handler to create new connection with password
+          passwordResolver = (responses) => {
+            waitingForPassword = false
+            const password = responses[0]
+
+            // Create new connection with password
+            const newConn = new Client()
+
+            newConn.on('ready', () => {
+              console.log(`SSH connected to ${hostName} with password`)
+              conn = newConn
+
+              newConn.shell({ term: 'xterm-256color' }, (err, stream) => {
+                if (err) {
+                  ws.send(`\r\nError: ${err.message}\r\n`)
+                  ws.close()
+                  return
+                }
+
+                shellStream = stream
+
+                stream.on('data', (data) => {
+                  try {
+                    ws.send(data.toString())
+                  } catch (e) {
+                    // WebSocket closed
+                  }
+                })
+
+                stream.on('close', () => {
+                  newConn.end()
+                  ws.close()
+                })
+              })
+
+              sftpSession = null
+            })
+
+            newConn.on('error', (err) => {
+              console.log(`SSH password auth error for ${hostName}:`, err.message)
+              ws.send(`\r\nSSH Error: ${err.message}\r\n`)
+              ws.close()
+            })
+
+            console.log(`Connecting to ${connectConfig.host}:${connectConfig.port} as ${connectConfig.username} with password`)
+            newConn.connect({
+              host: connectConfig.host,
+              port: connectConfig.port,
+              username: connectConfig.username,
+              password: password
+            })
+          }
+        } else if (!waitingForPassword) {
+          ws.send(`\r\nSSH Error: ${err.message}\r\n`)
+          ws.close()
+        }
+      })
 
       console.log(`Connecting to ${connectConfig.host}:${connectConfig.port} as ${connectConfig.username}`)
       conn.connect(connectConfig)
