@@ -58,6 +58,10 @@ export default function TerminalPage() {
   const [showExplorer, setShowExplorer] = useState(false)
   const [showTerminal, setShowTerminal] = useState(false)
 
+  // Fullscreen state
+  const [explorerFullscreen, setExplorerFullscreen] = useState(false)
+  const [terminalFullscreen, setTerminalFullscreen] = useState(false)
+
   // Open files in editor
   const [openFiles, setOpenFiles] = useState<OpenFile[]>([])
   const [activeFileIndex, setActiveFileIndex] = useState<number>(-1)
@@ -65,7 +69,8 @@ export default function TerminalPage() {
   // Handle workspace selection
   const handleSelectWorkspace = useCallback((path: string) => {
     setWorkspacePath(path)
-    setShowExplorer(false)
+    // Exit fullscreen when selecting workspace
+    setExplorerFullscreen(false)
   }, [])
 
   // Handle file open
@@ -75,6 +80,7 @@ export default function TerminalPage() {
     if (existingIndex >= 0) {
       setActiveFileIndex(existingIndex)
       setShowExplorer(false)
+      setExplorerFullscreen(false)
       return
     }
 
@@ -89,6 +95,7 @@ export default function TerminalPage() {
     setOpenFiles(prev => [...prev, newFile])
     setActiveFileIndex(openFiles.length)
     setShowExplorer(false)
+    setExplorerFullscreen(false)
   }, [openFiles])
 
   // Handle file content change
@@ -126,54 +133,102 @@ export default function TerminalPage() {
     }
   }, [activeFileIndex, openFiles.length])
 
-  // Toggle handlers
+  // Toggle handlers - open in fullscreen by default
   const toggleExplorer = useCallback(() => {
-    setShowExplorer(prev => !prev)
-  }, [])
+    if (showExplorer) {
+      setShowExplorer(false)
+      setExplorerFullscreen(false)
+    } else {
+      setShowExplorer(true)
+      setExplorerFullscreen(true)
+      // Hide terminal when opening explorer in fullscreen
+      setShowTerminal(false)
+      setTerminalFullscreen(false)
+    }
+  }, [showExplorer])
 
   const toggleTerminal = useCallback(() => {
-    setShowTerminal(prev => !prev)
+    if (showTerminal) {
+      setShowTerminal(false)
+      setTerminalFullscreen(false)
+    } else {
+      setShowTerminal(true)
+      setTerminalFullscreen(true)
+      // Hide explorer when opening terminal in fullscreen
+      setShowExplorer(false)
+      setExplorerFullscreen(false)
+    }
+  }, [showTerminal])
+
+  // Fullscreen toggle handlers
+  const toggleExplorerFullscreen = useCallback(() => {
+    setExplorerFullscreen(prev => !prev)
   }, [])
+
+  const toggleTerminalFullscreen = useCallback(() => {
+    setTerminalFullscreen(prev => !prev)
+  }, [])
+
+  // Close handlers
+  const closeExplorer = useCallback(() => {
+    setShowExplorer(false)
+    setExplorerFullscreen(false)
+  }, [])
+
+  const closeTerminal = useCallback(() => {
+    setShowTerminal(false)
+    setTerminalFullscreen(false)
+  }, [])
+
+  // Determine layout mode
+  const isExplorerFullscreen = showExplorer && explorerFullscreen
+  const isTerminalFullscreen = showTerminal && terminalFullscreen
 
   return (
     <ConnectionProvider host={host}>
       <div className="session-container">
         {/* Main content area */}
         <div className="main-area">
-          {/* File Explorer Sidebar */}
+          {/* File Explorer - Fullscreen or Sidebar */}
           {showExplorer && (
-            <div className="explorer-panel">
+            <div className={`explorer-panel ${isExplorerFullscreen ? 'fullscreen' : ''}`}>
               <FileExplorer
                 workspacePath={workspacePath}
+                isFullscreen={explorerFullscreen}
                 onSelectWorkspace={handleSelectWorkspace}
                 onOpenFile={handleOpenFile}
-                onClose={() => setShowExplorer(false)}
+                onClose={closeExplorer}
+                onToggleFullscreen={toggleExplorerFullscreen}
               />
             </div>
           )}
 
-          {/* Editor Area */}
-          <div className="editor-area">
-            <EditorArea
-              files={openFiles}
-              activeIndex={activeFileIndex}
-              onFileChange={handleFileChange}
-              onFileSaved={handleFileSaved}
-              onCloseFile={handleCloseFile}
-              onSelectFile={setActiveFileIndex}
-              host={host}
-              workspacePath={workspacePath}
-            />
-          </div>
+          {/* Editor Area - Hidden when explorer or terminal is fullscreen */}
+          {!isExplorerFullscreen && !isTerminalFullscreen && (
+            <div className="editor-area">
+              <EditorArea
+                files={openFiles}
+                activeIndex={activeFileIndex}
+                onFileChange={handleFileChange}
+                onFileSaved={handleFileSaved}
+                onCloseFile={handleCloseFile}
+                onSelectFile={setActiveFileIndex}
+                host={host}
+                workspacePath={workspacePath}
+              />
+            </div>
+          )}
         </div>
 
-        {/* Terminal Panel */}
+        {/* Terminal Panel - Fullscreen or Bottom Panel */}
         {showTerminal && (
-          <div className="terminal-panel">
+          <div className={`terminal-section ${isTerminalFullscreen ? 'fullscreen' : ''}`}>
             <TerminalPanel
               host={host}
               workspacePath={workspacePath}
-              onClose={() => setShowTerminal(false)}
+              isFullscreen={terminalFullscreen}
+              onClose={closeTerminal}
+              onToggleFullscreen={toggleTerminalFullscreen}
             />
           </div>
         )}
@@ -214,13 +269,18 @@ export default function TerminalPage() {
           display: flex;
           flex-direction: column;
         }
+        .explorer-panel.fullscreen {
+          max-width: none;
+          border-right: none;
+          z-index: 100;
+        }
         .editor-area {
           flex: 1;
           display: flex;
           flex-direction: column;
           overflow: hidden;
         }
-        .terminal-panel {
+        .terminal-section {
           height: 40%;
           min-height: 150px;
           max-height: 60%;
@@ -228,9 +288,21 @@ export default function TerminalPage() {
           display: flex;
           flex-direction: column;
         }
+        .terminal-section.fullscreen {
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          height: auto;
+          max-height: none;
+          min-height: auto;
+          z-index: 100;
+          border-top: none;
+        }
 
         @media (min-width: 768px) {
-          .explorer-panel {
+          .explorer-panel:not(.fullscreen) {
             position: relative;
             width: 280px;
             max-width: 280px;
