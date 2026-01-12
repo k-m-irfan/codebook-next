@@ -48,6 +48,7 @@ export default function EditorArea({
 }: EditorAreaProps) {
   const { writeFile, connected } = useConnection()
   const [saving, setSaving] = useState(false)
+  const [actionsExpanded, setActionsExpanded] = useState(false)
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
 
   const activeFile = activeIndex >= 0 && activeIndex < files.length ? files[activeIndex] : null
@@ -59,6 +60,7 @@ export default function EditorArea({
     try {
       await writeFile(activeFile.path, activeFile.content)
       onFileSaved(activeIndex, activeFile.content)
+      setActionsExpanded(false)
     } catch (err: any) {
       alert(`Failed to save: ${err.message}`)
     } finally {
@@ -80,6 +82,17 @@ export default function EditorArea({
 
   const handleEditorMount = useCallback((editor: editor.IStandaloneCodeEditor) => {
     editorRef.current = editor
+  }, [])
+
+  const handleSearch = useCallback(() => {
+    if (editorRef.current) {
+      editorRef.current.trigger('keyboard', 'actions.find', null)
+    }
+    setActionsExpanded(false)
+  }, [])
+
+  const toggleActions = useCallback(() => {
+    setActionsExpanded(prev => !prev)
   }, [])
 
   // No files open - show welcome screen
@@ -176,31 +189,57 @@ export default function EditorArea({
           />
         )}
 
-        {/* Floating action buttons - top right */}
+        {/* Collapsible floating action buttons - top right */}
         {activeFile && (
-          <div className="floating-actions">
-            <button
-              className="action-btn"
-              onClick={handleUndo}
-              title="Undo"
-            >
-              <UndoIcon />
-            </button>
-            <button
-              className="action-btn"
-              onClick={handleRedo}
-              title="Redo"
-            >
-              <RedoIcon />
-            </button>
-            <button
-              className={`action-btn save ${activeFile.isModified ? 'modified' : ''}`}
-              onClick={handleSave}
-              disabled={saving || !activeFile.isModified}
-              title="Save"
-            >
-              {saving ? <LoadingIcon /> : <SaveIcon />}
-            </button>
+          <div className={`floating-actions ${actionsExpanded ? 'expanded' : ''}`}>
+            {actionsExpanded ? (
+              <>
+                <button
+                  className="action-btn"
+                  onClick={handleSearch}
+                  title="Search"
+                >
+                  <SearchIcon />
+                </button>
+                <button
+                  className="action-btn"
+                  onClick={handleUndo}
+                  title="Undo"
+                >
+                  <UndoIcon />
+                </button>
+                <button
+                  className="action-btn"
+                  onClick={handleRedo}
+                  title="Redo"
+                >
+                  <RedoIcon />
+                </button>
+                <button
+                  className={`action-btn save ${activeFile.isModified ? 'modified' : ''}`}
+                  onClick={handleSave}
+                  disabled={saving || !activeFile.isModified}
+                  title="Save"
+                >
+                  {saving ? <LoadingIcon /> : <SaveIcon />}
+                </button>
+                <button
+                  className="action-btn toggle"
+                  onClick={toggleActions}
+                  title="Collapse"
+                >
+                  <CollapseIcon />
+                </button>
+              </>
+            ) : (
+              <button
+                className="action-btn toggle"
+                onClick={toggleActions}
+                title="Expand actions"
+              >
+                <MenuIcon />
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -287,8 +326,19 @@ export default function EditorArea({
           top: 12px;
           right: 12px;
           display: flex;
-          gap: 8px;
+          gap: 6px;
           z-index: 100;
+          padding: 4px;
+          background: rgba(22, 33, 62, 0.95);
+          border: 1px solid #3a3a6a;
+          border-radius: 10px;
+          backdrop-filter: blur(8px);
+          transition: all 0.2s ease;
+        }
+        .floating-actions:not(.expanded) {
+          padding: 0;
+          background: transparent;
+          border-color: transparent;
         }
         .action-btn {
           display: flex;
@@ -302,7 +352,10 @@ export default function EditorArea({
           border-radius: 8px;
           cursor: pointer;
           transition: all 0.15s ease;
-          backdrop-filter: blur(4px);
+        }
+        .floating-actions.expanded .action-btn {
+          background: transparent;
+          border-color: transparent;
         }
         .action-btn:hover:not(:disabled) {
           background: #3a3a6a;
@@ -322,6 +375,12 @@ export default function EditorArea({
         }
         .action-btn.save.modified:hover:not(:disabled) {
           background: #5a8c69;
+        }
+        .action-btn.toggle {
+          color: #888;
+        }
+        .action-btn.toggle:hover {
+          color: #fff;
         }
       `}</style>
     </div>
@@ -377,6 +436,34 @@ function LoadingIcon() {
       <line x1="18" y1="12" x2="22" y2="12" />
       <line x1="4.93" y1="19.07" x2="7.76" y2="16.24" />
       <line x1="16.24" y1="7.76" x2="19.07" y2="4.93" />
+    </svg>
+  )
+}
+
+function SearchIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="8" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </svg>
+  )
+}
+
+function MenuIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="1" />
+      <circle cx="12" cy="5" r="1" />
+      <circle cx="12" cy="19" r="1" />
+    </svg>
+  )
+}
+
+function CollapseIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
     </svg>
   )
 }
