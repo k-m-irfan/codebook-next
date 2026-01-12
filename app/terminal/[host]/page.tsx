@@ -69,13 +69,11 @@ export default function TerminalPage() {
   // Handle workspace selection
   const handleSelectWorkspace = useCallback((path: string) => {
     setWorkspacePath(path)
-    // Exit fullscreen when selecting workspace
     setExplorerFullscreen(false)
   }, [])
 
   // Handle file open
   const handleOpenFile = useCallback((path: string, name: string, content: string) => {
-    // Check if file is already open
     const existingIndex = openFiles.findIndex(f => f.path === path)
     if (existingIndex >= 0) {
       setActiveFileIndex(existingIndex)
@@ -84,7 +82,6 @@ export default function TerminalPage() {
       return
     }
 
-    // Add new file
     const newFile: OpenFile = {
       path,
       name,
@@ -141,7 +138,6 @@ export default function TerminalPage() {
     } else {
       setShowExplorer(true)
       setExplorerFullscreen(true)
-      // Hide terminal when opening explorer in fullscreen
       setShowTerminal(false)
       setTerminalFullscreen(false)
     }
@@ -154,31 +150,10 @@ export default function TerminalPage() {
     } else {
       setShowTerminal(true)
       setTerminalFullscreen(true)
-      // Hide explorer when opening terminal in fullscreen
       setShowExplorer(false)
       setExplorerFullscreen(false)
     }
   }, [showTerminal])
-
-  // Fullscreen toggle handlers
-  const toggleExplorerFullscreen = useCallback(() => {
-    setExplorerFullscreen(prev => !prev)
-  }, [])
-
-  const toggleTerminalFullscreen = useCallback(() => {
-    setTerminalFullscreen(prev => !prev)
-  }, [])
-
-  // Close handlers
-  const closeExplorer = useCallback(() => {
-    setShowExplorer(false)
-    setExplorerFullscreen(false)
-  }, [])
-
-  const closeTerminal = useCallback(() => {
-    setShowTerminal(false)
-    setTerminalFullscreen(false)
-  }, [])
 
   // Determine layout mode
   const isExplorerFullscreen = showExplorer && explorerFullscreen
@@ -187,8 +162,8 @@ export default function TerminalPage() {
   return (
     <ConnectionProvider host={host}>
       <div className="session-container">
-        {/* Main content area */}
-        <div className="main-area">
+        {/* Content area - above bottom nav */}
+        <div className="content-area">
           {/* File Explorer - Fullscreen or Sidebar */}
           {showExplorer && (
             <div className={`explorer-panel ${isExplorerFullscreen ? 'fullscreen' : ''}`}>
@@ -197,8 +172,16 @@ export default function TerminalPage() {
                 isFullscreen={explorerFullscreen}
                 onSelectWorkspace={handleSelectWorkspace}
                 onOpenFile={handleOpenFile}
-                onClose={closeExplorer}
-                onToggleFullscreen={toggleExplorerFullscreen}
+              />
+            </div>
+          )}
+
+          {/* Terminal Panel - Fullscreen */}
+          {showTerminal && isTerminalFullscreen && (
+            <div className="terminal-fullscreen">
+              <TerminalPanel
+                host={host}
+                workspacePath={workspacePath}
               />
             </div>
           )}
@@ -218,21 +201,19 @@ export default function TerminalPage() {
               />
             </div>
           )}
+
+          {/* Terminal Panel - Bottom panel (non-fullscreen) */}
+          {showTerminal && !isTerminalFullscreen && (
+            <div className="terminal-panel">
+              <TerminalPanel
+                host={host}
+                workspacePath={workspacePath}
+              />
+            </div>
+          )}
         </div>
 
-        {/* Terminal Panel - Fullscreen or Bottom Panel */}
-        {showTerminal && (
-          <div className={`terminal-section ${isTerminalFullscreen ? 'fullscreen' : ''}`}>
-            <TerminalPanel
-              host={host}
-              workspacePath={workspacePath}
-              isFullscreen={terminalFullscreen}
-              onClose={closeTerminal}
-              onToggleFullscreen={toggleTerminalFullscreen}
-            />
-          </div>
-        )}
-
+        {/* Bottom nav - always visible */}
         <BottomNav
           showExplorer={showExplorer}
           showTerminal={showTerminal}
@@ -243,6 +224,7 @@ export default function TerminalPage() {
 
       <style jsx>{`
         .session-container {
+          --bottom-nav-height: calc(56px + env(safe-area-inset-bottom, 0px));
           height: 100vh;
           height: 100dvh;
           background: #1a1a2e;
@@ -250,11 +232,13 @@ export default function TerminalPage() {
           flex-direction: column;
           overflow: hidden;
         }
-        .main-area {
+        .content-area {
           flex: 1;
           display: flex;
+          flex-direction: column;
           overflow: hidden;
           position: relative;
+          min-height: 0;
         }
         .explorer-panel {
           position: absolute;
@@ -270,9 +254,16 @@ export default function TerminalPage() {
           flex-direction: column;
         }
         .explorer-panel.fullscreen {
+          position: relative;
+          top: auto;
+          left: auto;
+          bottom: auto;
           max-width: none;
+          width: 100%;
+          flex: 1;
+          min-height: 0;
           border-right: none;
-          z-index: 100;
+          z-index: 1;
         }
         .editor-area {
           flex: 1;
@@ -280,7 +271,7 @@ export default function TerminalPage() {
           flex-direction: column;
           overflow: hidden;
         }
-        .terminal-section {
+        .terminal-panel {
           height: 40%;
           min-height: 150px;
           max-height: 60%;
@@ -288,17 +279,11 @@ export default function TerminalPage() {
           display: flex;
           flex-direction: column;
         }
-        .terminal-section.fullscreen {
-          position: absolute;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          height: auto;
-          max-height: none;
-          min-height: auto;
-          z-index: 100;
-          border-top: none;
+        .terminal-fullscreen {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          min-height: 0;
         }
 
         @media (min-width: 768px) {
@@ -306,6 +291,17 @@ export default function TerminalPage() {
             position: relative;
             width: 280px;
             max-width: 280px;
+          }
+          .content-area {
+            flex-direction: row;
+            flex-wrap: wrap;
+          }
+          .editor-area {
+            flex: 1;
+          }
+          .terminal-panel {
+            width: 100%;
+            flex-shrink: 0;
           }
         }
       `}</style>

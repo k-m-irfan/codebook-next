@@ -9,8 +9,6 @@ interface FileExplorerProps {
   isFullscreen: boolean
   onSelectWorkspace: (path: string) => void
   onOpenFile: (path: string, name: string, content: string) => void
-  onClose: () => void
-  onToggleFullscreen: () => void
 }
 
 function formatSize(bytes: number): string {
@@ -24,8 +22,6 @@ export default function FileExplorer({
   isFullscreen,
   onSelectWorkspace,
   onOpenFile,
-  onClose,
-  onToggleFullscreen,
 }: FileExplorerProps) {
   const { host, listFiles, readFile, createFile, deleteFile, renameFile } = useConnection()
 
@@ -227,13 +223,6 @@ export default function FileExplorer({
         >
           <PlusIcon />
         </button>
-        <div className="header-spacer" />
-        <button className="icon-btn" onClick={onToggleFullscreen} title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}>
-          {isFullscreen ? <MinimizeIcon /> : <MaximizeIcon />}
-        </button>
-        <button className="icon-btn" onClick={onClose} title="Close explorer">
-          <CloseIcon />
-        </button>
       </div>
 
       {/* Path */}
@@ -380,9 +369,6 @@ export default function FileExplorer({
         .icon-btn:disabled {
           opacity: 0.3;
           cursor: not-allowed;
-        }
-        .header-spacer {
-          flex: 1;
         }
         .path-bar {
           padding: 6px 12px;
@@ -674,15 +660,6 @@ function PlusIcon() {
   )
 }
 
-function CloseIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  )
-}
-
 function MoreIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -693,18 +670,3 @@ function MoreIcon() {
   )
 }
 
-function MaximizeIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
-    </svg>
-  )
-}
-
-function MinimizeIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7" />
-    </svg>
-  )
-}

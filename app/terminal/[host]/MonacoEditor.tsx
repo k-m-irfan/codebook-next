@@ -1,12 +1,14 @@
 'use client'
 
-import Editor from '@monaco-editor/react'
+import Editor, { type Monaco } from '@monaco-editor/react'
+import type { editor } from 'monaco-editor'
 
 interface MonacoEditorProps {
   value: string
   onChange: (value: string) => void
   filename: string
   readOnly?: boolean
+  onEditorMount?: (editor: editor.IStandaloneCodeEditor) => void
 }
 
 // Get language from filename extension
@@ -74,8 +76,20 @@ function getLanguage(filename: string): string {
   return languageMap[ext || ''] || 'plaintext'
 }
 
-export default function MonacoEditor({ value, onChange, filename, readOnly = false }: MonacoEditorProps) {
+export default function MonacoEditor({
+  value,
+  onChange,
+  filename,
+  readOnly = false,
+  onEditorMount
+}: MonacoEditorProps) {
   const language = getLanguage(filename)
+
+  const handleEditorDidMount = (editor: editor.IStandaloneCodeEditor, monaco: Monaco) => {
+    if (onEditorMount) {
+      onEditorMount(editor)
+    }
+  }
 
   return (
     <Editor
@@ -83,6 +97,7 @@ export default function MonacoEditor({ value, onChange, filename, readOnly = fal
       language={language}
       value={value}
       onChange={(val) => onChange(val || '')}
+      onMount={handleEditorDidMount}
       theme="vs-dark"
       options={{
         readOnly,

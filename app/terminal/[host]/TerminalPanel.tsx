@@ -17,17 +17,11 @@ interface TerminalTab {
 interface TerminalPanelProps {
   host: string
   workspacePath: string
-  isFullscreen: boolean
-  onClose: () => void
-  onToggleFullscreen: () => void
 }
 
 export default function TerminalPanel({
   host,
   workspacePath,
-  isFullscreen,
-  onClose,
-  onToggleFullscreen
 }: TerminalPanelProps) {
   const [tabs, setTabs] = useState<TerminalTab[]>([])
   const [activeTabId, setActiveTabId] = useState<string | null>(null)
@@ -60,7 +54,6 @@ export default function TerminalPanel({
         tab.term?.dispose()
       }
       const newTabs = prev.filter(t => t.id !== id)
-      // If we closed the active tab, switch to another
       if (activeTabId === id && newTabs.length > 0) {
         setActiveTabId(newTabs[newTabs.length - 1].id)
       } else if (newTabs.length === 0) {
@@ -88,7 +81,6 @@ export default function TerminalPanel({
 
     // If terminal already exists, just show it
     if (tab.term) {
-      // Clear container and re-attach
       const container = containerRef.current
       container.innerHTML = ''
       const termDiv = document.createElement('div')
@@ -141,7 +133,6 @@ export default function TerminalPanel({
       setTabs(prev => prev.map(t =>
         t.id === activeTabId ? { ...t, connected: true } : t
       ))
-      // Initial resize
       setTimeout(() => {
         if (!isCleanedUp) {
           try {
@@ -164,7 +155,6 @@ export default function TerminalPanel({
     ws.onmessage = (event) => {
       if (isCleanedUp) return
       const data = event.data
-      // Skip file operation responses
       try {
         const parsed = JSON.parse(data)
         if (parsed.type?.startsWith('file:')) return
@@ -174,14 +164,12 @@ export default function TerminalPanel({
       term.write(data)
     }
 
-    // Handle terminal input
     const dataDisposable = term.onData((data) => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(data)
       }
     })
 
-    // Handle resize
     const resizeObserver = new ResizeObserver(() => {
       if (!isCleanedUp) {
         try {
@@ -196,7 +184,6 @@ export default function TerminalPanel({
     })
     resizeObserver.observe(container)
 
-    // Update tab with references
     setTabs(prev => prev.map(t =>
       t.id === activeTabId ? { ...t, ws, term, fitAddon } : t
     ))
@@ -205,26 +192,8 @@ export default function TerminalPanel({
       isCleanedUp = true
       resizeObserver.disconnect()
       dataDisposable.dispose()
-      // Don't close ws/dispose term here - keep them for tab switching
     }
   }, [activeTabId, host]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Re-fit terminal when fullscreen changes
-  useEffect(() => {
-    const tab = tabs.find(t => t.id === activeTabId)
-    if (tab?.fitAddon) {
-      setTimeout(() => {
-        try {
-          tab.fitAddon?.fit()
-          if (tab.ws?.readyState === WebSocket.OPEN && tab.term) {
-            tab.ws.send(JSON.stringify({ type: 'resize', cols: tab.term.cols, rows: tab.term.rows }))
-          }
-        } catch (e) {
-          // Ignore
-        }
-      }, 100)
-    }
-  }, [isFullscreen, activeTabId, tabs])
 
   // Change directory when workspace changes
   useEffect(() => {
@@ -270,12 +239,6 @@ export default function TerminalPanel({
           <span className={`status ${activeTab?.connected ? 'connected' : ''}`}>
             {activeTab?.connected ? 'Connected' : 'Disconnected'}
           </span>
-          <button className="action-btn" onClick={onToggleFullscreen} title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}>
-            {isFullscreen ? <MinimizeIcon /> : <MaximizeIcon />}
-          </button>
-          <button className="action-btn" onClick={onClose} title="Close">
-            <CloseIcon size={14} />
-          </button>
         </div>
       </div>
       <div ref={containerRef} className="terminal-container" />
@@ -382,22 +345,6 @@ export default function TerminalPanel({
           color: #6f6;
           background: rgba(102, 255, 102, 0.1);
         }
-        .action-btn {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          width: 26px;
-          height: 26px;
-          background: none;
-          border: none;
-          color: #666;
-          cursor: pointer;
-          border-radius: 4px;
-        }
-        .action-btn:hover {
-          background: #2a2a4a;
-          color: #fff;
-        }
         .terminal-container {
           flex: 1;
           padding: 4px;
@@ -422,22 +369,6 @@ function PlusIcon() {
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <line x1="12" y1="5" x2="12" y2="19" />
       <line x1="5" y1="12" x2="19" y2="12" />
-    </svg>
-  )
-}
-
-function MaximizeIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
-    </svg>
-  )
-}
-
-function MinimizeIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7" />
     </svg>
   )
 }
