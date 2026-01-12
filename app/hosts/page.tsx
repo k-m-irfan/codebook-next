@@ -46,31 +46,32 @@ export default function HostsPage() {
           
           <div className="space-y-2">
             {/* Local Machine */}
-            <div className="border border-gray-200 rounded-md p-4 hover:bg-gray-50 cursor-pointer transition">
-              <div className="flex items-center">
-                <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mr-3">
-                  <span className="text-green-600 text-lg">💻</span>
+            <Link href="/terminal/local">
+              <div className="border border-gray-200 rounded-md p-4 hover:bg-gray-50 cursor-pointer transition">
+                <div className="flex items-center">
+                  <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mr-3">
+                    <span className="text-green-600 text-lg">💻</span>
+                  </div>
+                  <h3 className="font-medium text-gray-900">Local Machine</h3>
                 </div>
-                <h3 className="font-medium text-gray-900">Local Machine</h3>
               </div>
-            </div>
+            </Link>
 
             {/* Remote Hosts */}
             {loading ? (
               <div className="text-center py-8 text-gray-500">Loading hosts...</div>
             ) : hosts.length > 0 ? (
               hosts.map((host) => (
-                <div
-                  key={host.name}
-                  className="border border-gray-200 rounded-md p-4 hover:bg-gray-50 cursor-pointer transition"
-                >
-                  <div className="flex items-center">
-                    <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center mr-3">
-                      <span className="text-blue-600 text-lg">🖥️</span>
+                <Link key={host.name} href={`/terminal/${encodeURIComponent(host.name)}`}>
+                  <div className="border border-gray-200 rounded-md p-4 hover:bg-gray-50 cursor-pointer transition">
+                    <div className="flex items-center">
+                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center mr-3">
+                        <span className="text-blue-600 text-lg">🖥️</span>
+                      </div>
+                      <h3 className="font-medium text-gray-900">{host.name}</h3>
                     </div>
-                    <h3 className="font-medium text-gray-900">{host.name}</h3>
                   </div>
-                </div>
+                </Link>
               ))
             ) : (
               <div className="text-center py-8 text-gray-500">No remote hosts found</div>
