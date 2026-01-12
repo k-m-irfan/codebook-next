@@ -6,15 +6,18 @@ import { FitAddon } from 'xterm-addon-fit'
 import 'xterm/css/xterm.css'
 import { useConnection } from './ConnectionContext'
 
-interface TerminalComponentProps {
+interface TerminalPanelProps {
   host: string
+  workspacePath: string
+  onClose: () => void
 }
 
-export default function TerminalComponent({ host }: TerminalComponentProps) {
+export default function TerminalPanel({ host, workspacePath, onClose }: TerminalPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
-  const { connected, error, sendTerminalData, sendResize, onTerminalData } = useConnection()
+  const lastWorkspacePath = useRef<string>('')
+  const { connected, sendTerminalData, sendResize, onTerminalData } = useConnection()
 
   useEffect(() => {
     const container = containerRef.current
@@ -22,7 +25,7 @@ export default function TerminalComponent({ host }: TerminalComponentProps) {
 
     let isCleanedUp = false
 
-    // Create a fresh div for xterm to use
+    // Create a fresh div for xterm
     const terminalDiv = document.createElement('div')
     terminalDiv.style.width = '100%'
     terminalDiv.style.height = '100%'
@@ -30,10 +33,10 @@ export default function TerminalComponent({ host }: TerminalComponentProps) {
 
     const term = new Terminal({
       cursorBlink: true,
-      fontSize: 14,
+      fontSize: 13,
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
       theme: {
-        background: '#1a1a2e',
+        background: '#0f0f23',
         foreground: '#eee',
         cursor: '#fff',
         selectionBackground: '#4a4a8a',
@@ -54,135 +57,142 @@ export default function TerminalComponent({ host }: TerminalComponentProps) {
           fitAddon.fit()
           sendResize(term.cols, term.rows)
         } catch (e) {
-          // Ignore fit errors
+          // Ignore
         }
       }
     }, 100)
 
-    // Subscribe to terminal data from the connection
+    // Subscribe to terminal data
     const unsubscribe = onTerminalData((data) => {
       if (!isCleanedUp) {
-        // Try to parse as JSON to filter out file responses
         try {
           const parsed = JSON.parse(data)
-          // If it's a file response, don't write to terminal
-          if (parsed.type?.startsWith('file:')) {
-            return
-          }
+          if (parsed.type?.startsWith('file:')) return
         } catch {
-          // Not JSON, it's terminal data
+          // Not JSON
         }
         term.write(data)
       }
     })
 
-    // Handle terminal input - send to connection
+    // Handle terminal input
     const dataDisposable = term.onData((data) => {
       sendTerminalData(data)
     })
 
-    // Handle window resize
-    const handleResize = () => {
-      if (isCleanedUp) return
-      try {
-        fitAddon.fit()
-        sendResize(term.cols, term.rows)
-      } catch (e) {
-        // Ignore resize errors
-      }
-    }
-
-    window.addEventListener('resize', handleResize)
-
-    // Also handle when the container becomes visible
+    // Handle resize
     const resizeObserver = new ResizeObserver(() => {
       if (!isCleanedUp) {
         try {
           fitAddon.fit()
           sendResize(term.cols, term.rows)
         } catch (e) {
-          // Ignore fit errors
+          // Ignore
         }
       }
     })
     resizeObserver.observe(container)
 
-    // Cleanup function
     return () => {
       isCleanedUp = true
       clearTimeout(fitTimeout)
-      window.removeEventListener('resize', handleResize)
       resizeObserver.disconnect()
       unsubscribe()
       dataDisposable.dispose()
       term.dispose()
       termRef.current = null
       fitAddonRef.current = null
-
-      // Remove the terminal div completely
       if (terminalDiv.parentNode) {
         terminalDiv.parentNode.removeChild(terminalDiv)
       }
     }
   }, [host, sendTerminalData, sendResize, onTerminalData])
 
+  // Change directory when workspace changes
+  useEffect(() => {
+    if (workspacePath && workspacePath !== lastWorkspacePath.current && connected) {
+      lastWorkspacePath.current = workspacePath
+      // Send cd command to terminal
+      sendTerminalData(`cd ${workspacePath.includes(' ') ? `"${workspacePath}"` : workspacePath}\n`)
+    }
+  }, [workspacePath, connected, sendTerminalData])
+
   return (
-    <div className="terminal-view">
-      <div className="terminal-header">
-        <span className="terminal-title">{host}</span>
+    <div className="terminal-panel">
+      <div className="panel-header">
+        <span className="panel-title">Terminal</span>
         <span className={`status ${connected ? 'connected' : ''}`}>
           {connected ? 'Connected' : 'Disconnected'}
         </span>
+        <button className="close-btn" onClick={onClose}>
+          <CloseIcon />
+        </button>
       </div>
-      {error && <div className="error">{error}</div>}
       <div ref={containerRef} className="terminal-container" />
 
       <style jsx>{`
-        .terminal-view {
+        .terminal-panel {
           display: flex;
           flex-direction: column;
           height: 100%;
-          background: #1a1a2e;
-          padding-bottom: 60px;
+          background: #0f0f23;
         }
-        .terminal-header {
+        .panel-header {
           display: flex;
           align-items: center;
-          gap: 15px;
-          padding: 10px 16px;
-          background: #0f0f23;
+          gap: 10px;
+          padding: 6px 12px;
+          background: #16213e;
           border-bottom: 1px solid #2a2a4a;
         }
-        .terminal-title {
+        .panel-title {
           flex: 1;
           color: #fff;
-          font-weight: 600;
-          font-size: 0.95rem;
+          font-size: 0.85rem;
+          font-weight: 500;
         }
         .status {
-          font-size: 0.75rem;
+          font-size: 0.7rem;
           color: #f66;
-          padding: 4px 10px;
+          padding: 2px 8px;
           background: rgba(255, 102, 102, 0.1);
-          border-radius: 4px;
+          border-radius: 3px;
         }
         .status.connected {
           color: #6f6;
           background: rgba(102, 255, 102, 0.1);
         }
-        .error {
-          padding: 8px 16px;
-          background: #cc3333;
+        .close-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 24px;
+          height: 24px;
+          background: none;
+          border: none;
+          color: #666;
+          cursor: pointer;
+          border-radius: 4px;
+        }
+        .close-btn:hover {
+          background: #2a2a4a;
           color: #fff;
-          text-align: center;
-          font-size: 0.85rem;
         }
         .terminal-container {
           flex: 1;
-          padding: 8px;
+          padding: 4px;
           overflow: hidden;
         }
       `}</style>
     </div>
+  )
+}
+
+function CloseIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
   )
 }

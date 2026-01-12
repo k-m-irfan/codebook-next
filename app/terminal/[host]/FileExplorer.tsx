@@ -1,28 +1,15 @@
 'use client'
 
-import { useState, useCallback } from 'react'
-import dynamic from 'next/dynamic'
+import { useState, useCallback, useEffect } from 'react'
 import { useConnection } from './ConnectionContext'
 import type { FileEntry } from '@/lib/file-protocol'
 
-const MonacoEditor = dynamic(() => import('./MonacoEditor'), {
-  ssr: false,
-  loading: () => (
-    <div className="editor-loading">
-      <style jsx>{`
-        .editor-loading {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          height: 100%;
-          background: #1e1e1e;
-          color: #888;
-        }
-      `}</style>
-      Loading editor...
-    </div>
-  ),
-})
+interface FileExplorerProps {
+  workspacePath: string
+  onSelectWorkspace: (path: string) => void
+  onOpenFile: (path: string, name: string, content: string) => void
+  onClose: () => void
+}
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -30,18 +17,18 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-export default function FileExplorer() {
-  const { host, listFiles, readFile, writeFile, createFile, deleteFile, renameFile } = useConnection()
+export default function FileExplorer({
+  workspacePath,
+  onSelectWorkspace,
+  onOpenFile,
+  onClose,
+}: FileExplorerProps) {
+  const { host, listFiles, readFile, createFile, deleteFile, renameFile } = useConnection()
 
-  const [currentPath, setCurrentPath] = useState<string>('')
+  const [currentPath, setCurrentPath] = useState<string>(workspacePath || '')
   const [entries, setEntries] = useState<FileEntry[]>([])
-  const [selectedFile, setSelectedFile] = useState<FileEntry | null>(null)
-  const [fileContent, setFileContent] = useState<string>('')
-  const [originalContent, setOriginalContent] = useState<string>('')
-  const [isEditing, setIsEditing] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
 
   // Dialog states
   const [showCreateDialog, setShowCreateDialog] = useState(false)
@@ -71,43 +58,31 @@ export default function FileExplorer() {
     }
   }, [listFiles])
 
-  // Open file in editor
-  const openFile = useCallback(async (entry: FileEntry) => {
+  // Load workspace path on mount or when it changes
+  useEffect(() => {
+    if (workspacePath) {
+      loadDirectory(workspacePath)
+    }
+  }, [workspacePath, loadDirectory])
+
+  // Open file handler
+  const handleFileClick = useCallback(async (entry: FileEntry) => {
     if (entry.isDirectory) {
       loadDirectory(entry.path)
       return
     }
 
+    // Read file and open in editor
     setLoading(true)
-    setError(null)
     try {
       const { content } = await readFile(entry.path)
-      setSelectedFile(entry)
-      setFileContent(content)
-      setOriginalContent(content)
-      setIsEditing(true)
+      onOpenFile(entry.path, entry.name, content)
     } catch (err: any) {
       setError(`Failed to open file: ${err.message}`)
     } finally {
       setLoading(false)
     }
-  }, [readFile, loadDirectory])
-
-  // Save file
-  const saveFile = useCallback(async () => {
-    if (!selectedFile) return
-
-    setSaving(true)
-    try {
-      await writeFile(selectedFile.path, fileContent)
-      setOriginalContent(fileContent)
-      setError(null)
-    } catch (err: any) {
-      setError(`Failed to save: ${err.message}`)
-    } finally {
-      setSaving(false)
-    }
-  }, [selectedFile, fileContent, writeFile])
+  }, [loadDirectory, readFile, onOpenFile])
 
   // Navigate up
   const goUp = useCallback(() => {
@@ -118,11 +93,18 @@ export default function FileExplorer() {
     loadDirectory(parentPath)
   }, [currentPath, loadDirectory])
 
-  // Open folder - start browsing
+  // Open initial folder
   const openFolder = useCallback(() => {
     const defaultPath = host === 'local' ? '/' : '/home'
     loadDirectory(defaultPath)
   }, [host, loadDirectory])
+
+  // Select current folder as workspace
+  const selectThisFolder = useCallback(() => {
+    if (currentPath) {
+      onSelectWorkspace(currentPath)
+    }
+  }, [currentPath, onSelectWorkspace])
 
   // Create new file/folder
   const handleCreate = useCallback(async () => {
@@ -174,192 +156,91 @@ export default function FileExplorer() {
     }
   }, [contextEntry, deleteFile, currentPath, loadDirectory])
 
-  // Context menu for file operations
-  const showContextMenu = (entry: FileEntry) => {
-    setContextEntry(entry)
-    setDialogInput(entry.name)
-  }
-
-  const hasChanges = fileContent !== originalContent
-
-  // If no path selected, show "Open Folder" button
+  // If no path, show "Open Folder" prompt
   if (!currentPath) {
     return (
-      <div className="file-explorer empty">
+      <div className="explorer-empty">
         <button className="open-folder-btn" onClick={openFolder}>
           <FolderOpenIcon />
           <span>Open Folder</span>
         </button>
-        <p className="hint">Select a folder to browse files</p>
+        <p className="hint">Browse files on {host}</p>
 
         <style jsx>{`
-          .file-explorer.empty {
+          .explorer-empty {
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             height: 100%;
-            background: #1a1a2e;
+            padding: 20px;
           }
           .open-folder-btn {
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 12px;
-            padding: 32px 48px;
-            background: #16213e;
+            gap: 10px;
+            padding: 24px 36px;
+            background: #1a1a2e;
             border: 2px dashed #3a3a5a;
-            border-radius: 12px;
+            border-radius: 10px;
             color: #fff;
             cursor: pointer;
             transition: all 0.2s;
           }
           .open-folder-btn:hover {
-            background: #1f2847;
+            background: #222244;
             border-color: #5a5a8a;
           }
           .hint {
-            margin-top: 16px;
+            margin-top: 12px;
             color: #666;
-            font-size: 0.9rem;
-          }
-        `}</style>
-      </div>
-    )
-  }
-
-  // File editing view
-  if (isEditing && selectedFile) {
-    return (
-      <div className="file-editor">
-        <div className="editor-header">
-          <button className="back-btn" onClick={() => setIsEditing(false)}>
-            <BackIcon />
-          </button>
-          <span className="file-name">
-            {selectedFile.name}
-            {hasChanges && <span className="unsaved">*</span>}
-          </span>
-          <button
-            className="save-btn"
-            onClick={saveFile}
-            disabled={saving || !hasChanges}
-          >
-            {saving ? 'Saving...' : 'Save'}
-          </button>
-        </div>
-        {error && <div className="error-bar">{error}</div>}
-        <div className="editor-container">
-          <MonacoEditor
-            value={fileContent}
-            onChange={setFileContent}
-            filename={selectedFile.name}
-          />
-        </div>
-
-        <style jsx>{`
-          .file-editor {
-            display: flex;
-            flex-direction: column;
-            height: 100%;
-            background: #1a1a2e;
-            padding-bottom: 60px;
-          }
-          .editor-header {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 12px 16px;
-            background: #0f0f23;
-            border-bottom: 1px solid #2a2a4a;
-          }
-          .back-btn {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 36px;
-            height: 36px;
-            background: #2a2a4a;
-            border: none;
-            color: #fff;
-            border-radius: 6px;
-            cursor: pointer;
-          }
-          .back-btn:hover {
-            background: #3a3a6a;
-          }
-          .file-name {
-            flex: 1;
-            color: #fff;
-            font-weight: 500;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-          }
-          .unsaved {
-            color: #f90;
-            margin-left: 4px;
-          }
-          .save-btn {
-            background: #4a7c59;
-            border: none;
-            color: #fff;
-            padding: 8px 20px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: 500;
-          }
-          .save-btn:hover:not(:disabled) {
-            background: #5a8c69;
-          }
-          .save-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-          }
-          .error-bar {
-            padding: 8px 16px;
-            background: #cc3333;
-            color: #fff;
             font-size: 0.85rem;
           }
-          .editor-container {
-            flex: 1;
-            overflow: hidden;
-          }
         `}</style>
       </div>
     )
   }
 
-  // File browser view
   return (
     <div className="file-explorer">
+      {/* Header */}
       <div className="explorer-header">
-        <button className="nav-btn" onClick={goUp} disabled={currentPath === '/'}>
+        <button className="icon-btn" onClick={goUp} disabled={currentPath === '/'} title="Go up">
           <UpIcon />
         </button>
-        <div className="path-breadcrumb">{currentPath || '/'}</div>
+        <button className="icon-btn" onClick={selectThisFolder} title="Select this folder as workspace">
+          <CheckIcon />
+        </button>
         <button
-          className="action-btn"
+          className="icon-btn"
           onClick={() => {
             setShowCreateDialog(true)
             setDialogInput('')
             setCreateIsDirectory(false)
           }}
+          title="New file/folder"
         >
           <PlusIcon />
         </button>
+        <button className="icon-btn close" onClick={onClose} title="Close explorer">
+          <CloseIcon />
+        </button>
       </div>
+
+      {/* Path */}
+      <div className="path-bar">{currentPath}</div>
 
       {error && <div className="error-bar">{error}</div>}
       {loading && <div className="loading-bar">Loading...</div>}
 
+      {/* File list */}
       <div className="file-list">
         {entries.map((entry) => (
           <div
             key={entry.path}
             className={`file-item ${entry.isDirectory ? 'directory' : 'file'}`}
-            onClick={() => openFile(entry)}
+            onClick={() => handleFileClick(entry)}
           >
             <div className="file-icon">
               {entry.isDirectory ? <FolderIcon /> : <FileIcon />}
@@ -370,7 +251,8 @@ export default function FileExplorer() {
               className="more-btn"
               onClick={(e) => {
                 e.stopPropagation()
-                showContextMenu(entry)
+                setContextEntry(entry)
+                setDialogInput(entry.name)
               }}
             >
               <MoreIcon />
@@ -378,29 +260,17 @@ export default function FileExplorer() {
           </div>
         ))}
         {entries.length === 0 && !loading && (
-          <div className="empty-message">This folder is empty</div>
+          <div className="empty-message">Empty folder</div>
         )}
       </div>
 
-      {/* Context menu for selected entry */}
+      {/* Context menu */}
       {contextEntry && (
         <div className="context-overlay" onClick={() => setContextEntry(null)}>
           <div className="context-menu" onClick={(e) => e.stopPropagation()}>
             <div className="context-header">{contextEntry.name}</div>
-            <button
-              onClick={() => {
-                setShowRenameDialog(true)
-                setDialogInput(contextEntry.name)
-              }}
-            >
-              Rename
-            </button>
-            <button
-              className="danger"
-              onClick={() => setShowDeleteDialog(true)}
-            >
-              Delete
-            </button>
+            <button onClick={() => setShowRenameDialog(true)}>Rename</button>
+            <button className="danger" onClick={() => setShowDeleteDialog(true)}>Delete</button>
             <button onClick={() => setContextEntry(null)}>Cancel</button>
           </div>
         </div>
@@ -412,16 +282,10 @@ export default function FileExplorer() {
           <div className="dialog" onClick={(e) => e.stopPropagation()}>
             <h3>Create New</h3>
             <div className="dialog-type-toggle">
-              <button
-                className={!createIsDirectory ? 'active' : ''}
-                onClick={() => setCreateIsDirectory(false)}
-              >
+              <button className={!createIsDirectory ? 'active' : ''} onClick={() => setCreateIsDirectory(false)}>
                 File
               </button>
-              <button
-                className={createIsDirectory ? 'active' : ''}
-                onClick={() => setCreateIsDirectory(true)}
-              >
+              <button className={createIsDirectory ? 'active' : ''} onClick={() => setCreateIsDirectory(true)}>
                 Folder
               </button>
             </div>
@@ -435,9 +299,7 @@ export default function FileExplorer() {
             />
             <div className="dialog-buttons">
               <button onClick={() => setShowCreateDialog(false)}>Cancel</button>
-              <button className="primary" onClick={handleCreate}>
-                Create
-              </button>
+              <button className="primary" onClick={handleCreate}>Create</button>
             </div>
           </div>
         </div>
@@ -458,15 +320,13 @@ export default function FileExplorer() {
             />
             <div className="dialog-buttons">
               <button onClick={() => setShowRenameDialog(false)}>Cancel</button>
-              <button className="primary" onClick={handleRename}>
-                Rename
-              </button>
+              <button className="primary" onClick={handleRename}>Rename</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Delete confirmation dialog */}
+      {/* Delete dialog */}
       {showDeleteDialog && (
         <div className="dialog-overlay" onClick={() => setShowDeleteDialog(false)}>
           <div className="dialog" onClick={(e) => e.stopPropagation()}>
@@ -474,9 +334,7 @@ export default function FileExplorer() {
             <p>Are you sure you want to delete "{contextEntry?.name}"?</p>
             <div className="dialog-buttons">
               <button onClick={() => setShowDeleteDialog(false)}>Cancel</button>
-              <button className="danger" onClick={handleDelete}>
-                Delete
-              </button>
+              <button className="danger" onClick={handleDelete}>Delete</button>
             </div>
           </div>
         </div>
@@ -487,93 +345,93 @@ export default function FileExplorer() {
           display: flex;
           flex-direction: column;
           height: 100%;
-          background: #1a1a2e;
-          padding-bottom: 60px;
+          background: #16213e;
         }
         .explorer-header {
           display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 12px 16px;
-          background: #0f0f23;
+          gap: 4px;
+          padding: 8px;
           border-bottom: 1px solid #2a2a4a;
         }
-        .nav-btn,
-        .action-btn {
+        .icon-btn {
           display: flex;
           align-items: center;
           justify-content: center;
-          width: 36px;
-          height: 36px;
-          background: #2a2a4a;
+          width: 32px;
+          height: 32px;
+          background: #1a1a2e;
           border: none;
-          color: #fff;
+          color: #888;
           border-radius: 6px;
           cursor: pointer;
         }
-        .nav-btn:hover:not(:disabled),
-        .action-btn:hover {
-          background: #3a3a6a;
+        .icon-btn:hover:not(:disabled) {
+          background: #2a2a4a;
+          color: #fff;
         }
-        .nav-btn:disabled {
+        .icon-btn:disabled {
           opacity: 0.3;
           cursor: not-allowed;
         }
-        .path-breadcrumb {
-          flex: 1;
-          color: #aaa;
-          font-size: 0.9rem;
+        .icon-btn.close {
+          margin-left: auto;
+        }
+        .path-bar {
+          padding: 6px 12px;
+          background: #0f0f23;
+          color: #888;
+          font-size: 0.75rem;
+          font-family: monospace;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
         }
         .error-bar {
-          padding: 8px 16px;
+          padding: 6px 12px;
           background: #cc3333;
           color: #fff;
-          font-size: 0.85rem;
+          font-size: 0.8rem;
         }
         .loading-bar {
-          padding: 8px 16px;
+          padding: 6px 12px;
           background: #2a2a4a;
           color: #888;
-          font-size: 0.85rem;
+          font-size: 0.8rem;
           text-align: center;
         }
         .file-list {
           flex: 1;
           overflow-y: auto;
-          padding: 8px;
+          padding: 4px;
         }
         .file-item {
           display: flex;
           align-items: center;
-          gap: 12px;
-          padding: 12px 16px;
-          margin: 4px 0;
-          background: #16213e;
-          border-radius: 8px;
+          gap: 8px;
+          padding: 8px 10px;
+          margin: 2px 0;
+          background: transparent;
+          border-radius: 6px;
           cursor: pointer;
-          transition: background 0.2s;
+          transition: background 0.15s;
         }
         .file-item:hover {
-          background: #1f2847;
+          background: #1a1a2e;
         }
         .file-item:active {
-          background: #2a3352;
+          background: #222244;
         }
         .file-icon {
           display: flex;
-          align-items: center;
-          justify-content: center;
-          color: #888;
+          color: #666;
         }
         .directory .file-icon {
           color: #7eb0d5;
         }
         .name {
           flex: 1;
-          color: #fff;
+          color: #ddd;
+          font-size: 0.85rem;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
@@ -582,20 +440,24 @@ export default function FileExplorer() {
           color: #7eb0d5;
         }
         .size {
-          color: #666;
-          font-size: 0.8rem;
+          color: #555;
+          font-size: 0.7rem;
         }
         .more-btn {
           display: flex;
           align-items: center;
           justify-content: center;
-          width: 32px;
-          height: 32px;
+          width: 24px;
+          height: 24px;
           background: none;
           border: none;
-          color: #666;
-          border-radius: 4px;
+          color: #555;
           cursor: pointer;
+          border-radius: 4px;
+          opacity: 0;
+        }
+        .file-item:hover .more-btn {
+          opacity: 1;
         }
         .more-btn:hover {
           background: #2a2a4a;
@@ -603,11 +465,11 @@ export default function FileExplorer() {
         }
         .empty-message {
           text-align: center;
-          color: #666;
-          padding: 40px 20px;
+          color: #555;
+          padding: 30px 15px;
+          font-size: 0.85rem;
         }
 
-        /* Context menu overlay */
         .context-overlay {
           position: fixed;
           top: 0;
@@ -622,30 +484,30 @@ export default function FileExplorer() {
         }
         .context-menu {
           width: 100%;
-          max-width: 400px;
+          max-width: 360px;
           background: #16213e;
           border-radius: 12px 12px 0 0;
-          padding: 16px;
-          padding-bottom: max(16px, env(safe-area-inset-bottom));
+          padding: 12px;
+          padding-bottom: max(12px, env(safe-area-inset-bottom));
         }
         .context-header {
-          padding: 8px 16px;
-          color: #888;
-          font-size: 0.85rem;
+          padding: 8px 12px;
+          color: #666;
+          font-size: 0.8rem;
           border-bottom: 1px solid #2a2a4a;
-          margin-bottom: 8px;
+          margin-bottom: 6px;
         }
         .context-menu button {
           display: block;
           width: 100%;
-          padding: 14px 16px;
+          padding: 12px;
           background: none;
           border: none;
           color: #fff;
           text-align: left;
-          font-size: 1rem;
+          font-size: 0.95rem;
           cursor: pointer;
-          border-radius: 8px;
+          border-radius: 6px;
         }
         .context-menu button:hover {
           background: #2a2a4a;
@@ -654,7 +516,6 @@ export default function FileExplorer() {
           color: #f66;
         }
 
-        /* Dialog styles */
         .dialog-overlay {
           position: fixed;
           top: 0;
@@ -670,29 +531,29 @@ export default function FileExplorer() {
         }
         .dialog {
           width: 100%;
-          max-width: 360px;
+          max-width: 320px;
           background: #16213e;
-          border-radius: 12px;
-          padding: 20px;
+          border-radius: 10px;
+          padding: 16px;
         }
         .dialog h3 {
-          margin: 0 0 16px;
+          margin: 0 0 12px;
           color: #fff;
-          font-size: 1.1rem;
+          font-size: 1rem;
         }
         .dialog p {
           color: #aaa;
-          margin: 0 0 16px;
-          font-size: 0.9rem;
+          margin: 0 0 12px;
+          font-size: 0.85rem;
         }
         .dialog input {
           width: 100%;
-          padding: 12px;
+          padding: 10px;
           background: #0f0f23;
           border: 1px solid #2a2a4a;
           border-radius: 6px;
           color: #fff;
-          font-size: 1rem;
+          font-size: 0.95rem;
         }
         .dialog input:focus {
           outline: none;
@@ -700,17 +561,18 @@ export default function FileExplorer() {
         }
         .dialog-type-toggle {
           display: flex;
-          gap: 8px;
-          margin-bottom: 12px;
+          gap: 6px;
+          margin-bottom: 10px;
         }
         .dialog-type-toggle button {
           flex: 1;
-          padding: 8px;
+          padding: 6px;
           background: #0f0f23;
           border: 1px solid #2a2a4a;
           color: #888;
-          border-radius: 6px;
+          border-radius: 5px;
           cursor: pointer;
+          font-size: 0.85rem;
         }
         .dialog-type-toggle button.active {
           background: #2a2a4a;
@@ -720,14 +582,14 @@ export default function FileExplorer() {
         .dialog-buttons {
           display: flex;
           gap: 8px;
-          margin-top: 16px;
+          margin-top: 12px;
         }
         .dialog-buttons button {
           flex: 1;
-          padding: 12px;
+          padding: 10px;
           border: none;
           border-radius: 6px;
-          font-size: 0.95rem;
+          font-size: 0.9rem;
           cursor: pointer;
           background: #2a2a4a;
           color: #fff;
@@ -755,17 +617,15 @@ export default function FileExplorer() {
 // Icons
 function FolderOpenIcon() {
   return (
-    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
       <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-      <line x1="12" y1="11" x2="12" y2="17" />
-      <line x1="9" y1="14" x2="15" y2="14" />
     </svg>
   )
 }
 
 function FolderIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
     </svg>
   )
@@ -773,43 +633,51 @@ function FolderIcon() {
 
 function FileIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
       <polyline points="14 2 14 8 20 8" />
     </svg>
   )
 }
 
-function BackIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="19" y1="12" x2="5" y2="12" />
-      <polyline points="12 19 5 12 12 5" />
-    </svg>
-  )
-}
-
 function UpIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <line x1="12" y1="19" x2="12" y2="5" />
       <polyline points="5 12 12 5 19 12" />
     </svg>
   )
 }
 
+function CheckIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  )
+}
+
 function PlusIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <line x1="12" y1="5" x2="12" y2="19" />
       <line x1="5" y1="12" x2="19" y2="12" />
     </svg>
   )
 }
 
+function CloseIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  )
+}
+
 function MoreIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <circle cx="12" cy="12" r="1" />
       <circle cx="12" cy="5" r="1" />
       <circle cx="12" cy="19" r="1" />
