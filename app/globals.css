@@ -4,11 +4,18 @@
   padding: 0;
 }
 
+html {
+  background-color: #0f0f23;
+  overscroll-behavior: none;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-  background-color: #1a1a2e;
+  background-color: #0f0f23;
   color: #eee;
   min-height: 100vh;
+  min-height: 100dvh;
+  overscroll-behavior: none;
 }
 
 .app {

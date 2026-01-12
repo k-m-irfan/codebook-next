@@ -163,27 +163,24 @@ export default function TerminalPage() {
       <div className="session-container">
         {/* Content area - above bottom nav */}
         <div className="content-area">
-          {/* File Explorer - Fullscreen or Sidebar */}
-          {showExplorer && (
-            <div className={`explorer-panel ${isExplorerFullscreen ? 'fullscreen' : ''}`}>
-              <FileExplorer
-                workspacePath={workspacePath}
-                isFullscreen={explorerFullscreen}
-                onSelectWorkspace={handleSelectWorkspace}
-                onOpenFile={handleOpenFile}
-              />
-            </div>
-          )}
+          {/* File Explorer - Fullscreen (always mounted, hidden when not active) */}
+          <div className={`explorer-panel fullscreen ${isExplorerFullscreen ? 'visible' : 'hidden'}`}>
+            <FileExplorer
+              workspacePath={workspacePath}
+              isFullscreen={explorerFullscreen}
+              onSelectWorkspace={handleSelectWorkspace}
+              onOpenFile={handleOpenFile}
+            />
+          </div>
 
-          {/* Terminal Panel - Fullscreen */}
-          {showTerminal && isTerminalFullscreen && (
-            <div className="terminal-fullscreen">
-              <TerminalPanel
-                host={host}
-                workspacePath={workspacePath}
-              />
-            </div>
-          )}
+          {/* Terminal Panel - Fullscreen (always mounted, hidden when not active) */}
+          <div className={`terminal-fullscreen ${isTerminalFullscreen ? 'visible' : 'hidden'}`}>
+            <TerminalPanel
+              host={host}
+              workspacePath={workspacePath}
+              isVisible={isTerminalFullscreen}
+            />
+          </div>
 
           {/* Editor Area - Hidden when explorer or terminal is fullscreen */}
           {!isExplorerFullscreen && !isTerminalFullscreen && (
@@ -201,15 +198,7 @@ export default function TerminalPage() {
             </div>
           )}
 
-          {/* Terminal Panel - Bottom panel (non-fullscreen) */}
-          {showTerminal && !isTerminalFullscreen && (
-            <div className="terminal-panel">
-              <TerminalPanel
-                host={host}
-                workspacePath={workspacePath}
-              />
-            </div>
-          )}
+          {/* Terminal Panel - Bottom panel (non-fullscreen) - removed duplicate, using fullscreen only */}
         </div>
 
         {/* Bottom nav - always visible */}
@@ -238,31 +227,32 @@ export default function TerminalPage() {
           overflow: hidden;
           position: relative;
           min-height: 0;
+          padding-bottom: var(--bottom-nav-height);
         }
         .explorer-panel {
           position: absolute;
           top: 0;
           left: 0;
+          right: 0;
           bottom: 0;
-          width: 100%;
-          max-width: 320px;
           background: #16213e;
-          border-right: 1px solid #2a2a4a;
-          z-index: 50;
+          z-index: 10;
           display: flex;
           flex-direction: column;
         }
         .explorer-panel.fullscreen {
-          position: relative;
-          top: auto;
-          left: auto;
-          bottom: auto;
-          max-width: none;
-          width: 100%;
           flex: 1;
           min-height: 0;
-          border-right: none;
-          z-index: 1;
+        }
+        .explorer-panel.hidden {
+          visibility: hidden;
+          pointer-events: none;
+          z-index: -1;
+        }
+        .explorer-panel.visible {
+          visibility: visible;
+          pointer-events: auto;
+          z-index: 10;
         }
         .editor-area {
           flex: 1;
@@ -279,10 +269,25 @@ export default function TerminalPage() {
           flex-direction: column;
         }
         .terminal-fullscreen {
-          flex: 1;
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
           display: flex;
           flex-direction: column;
           min-height: 0;
+          z-index: 10;
+        }
+        .terminal-fullscreen.hidden {
+          visibility: hidden;
+          pointer-events: none;
+          z-index: -1;
+        }
+        .terminal-fullscreen.visible {
+          visibility: visible;
+          pointer-events: auto;
+          z-index: 10;
         }
 
         @media (min-width: 768px) {

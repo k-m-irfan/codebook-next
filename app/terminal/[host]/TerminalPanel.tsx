@@ -12,16 +12,19 @@ interface TerminalTab {
   term: Terminal | null
   fitAddon: FitAddon | null
   connected: boolean
+  containerEl: HTMLDivElement | null
 }
 
 interface TerminalPanelProps {
   host: string
   workspacePath: string
+  isVisible?: boolean
 }
 
 export default function TerminalPanel({
   host,
   workspacePath,
+  isVisible = false,
 }: TerminalPanelProps) {
   const [tabs, setTabs] = useState<TerminalTab[]>([])
   const [activeTabId, setActiveTabId] = useState<string | null>(null)
@@ -39,6 +42,7 @@ export default function TerminalPanel({
       term: null,
       fitAddon: null,
       connected: false,
+      containerEl: null,
     }
     setTabs(prev => [...prev, newTab])
     setActiveTabId(id)
@@ -52,6 +56,7 @@ export default function TerminalPanel({
       if (tab) {
         tab.ws?.close()
         tab.term?.dispose()
+        tab.containerEl?.remove()
       }
       const newTabs = prev.filter(t => t.id !== id)
       if (activeTabId === id && newTabs.length > 0) {
@@ -70,108 +75,111 @@ export default function TerminalPanel({
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Setup terminal for active tab
+  // Show/hide terminal containers based on active tab
   useEffect(() => {
-    if (!activeTabId || !containerRef.current) return
-
-    const tabIndex = tabs.findIndex(t => t.id === activeTabId)
-    if (tabIndex === -1) return
-
-    const tab = tabs[tabIndex]
-
-    // If terminal already exists, just show it
-    if (tab.term) {
-      const container = containerRef.current
-      container.innerHTML = ''
-      const termDiv = document.createElement('div')
-      termDiv.style.width = '100%'
-      termDiv.style.height = '100%'
-      container.appendChild(termDiv)
-      tab.term.open(termDiv)
+    tabs.forEach(tab => {
+      if (tab.containerEl) {
+        tab.containerEl.style.display = tab.id === activeTabId ? 'block' : 'none'
+      }
+    })
+    // Fit the active terminal
+    const activeTab = tabs.find(t => t.id === activeTabId)
+    if (activeTab?.fitAddon) {
       setTimeout(() => {
         try {
-          tab.fitAddon?.fit()
+          activeTab.fitAddon?.fit()
         } catch (e) {
           // Ignore
         }
       }, 50)
-      return
     }
+  }, [activeTabId, tabs])
 
-    // Create new terminal instance
-    let isCleanedUp = false
-    const container = containerRef.current
-    container.innerHTML = ''
+  // Setup terminal for tabs that don't have one yet
+  useEffect(() => {
+    if (!containerRef.current) return
 
-    const termDiv = document.createElement('div')
-    termDiv.style.width = '100%'
-    termDiv.style.height = '100%'
-    container.appendChild(termDiv)
+    const tabsNeedingSetup = tabs.filter(t => !t.term && !t.containerEl)
+    if (tabsNeedingSetup.length === 0) return
 
-    const term = new Terminal({
-      cursorBlink: true,
-      fontSize: 13,
-      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-      theme: {
-        background: '#0f0f23',
-        foreground: '#eee',
-        cursor: '#fff',
-        selectionBackground: '#4a4a8a',
-      },
-    })
+    tabsNeedingSetup.forEach(tab => {
+      const container = containerRef.current!
 
-    const fitAddon = new FitAddon()
-    term.loadAddon(fitAddon)
-    term.open(termDiv)
+      // Create persistent container for this terminal
+      const termDiv = document.createElement('div')
+      termDiv.style.width = '100%'
+      termDiv.style.height = '100%'
+      termDiv.style.display = tab.id === activeTabId ? 'block' : 'none'
+      termDiv.dataset.tabId = tab.id
+      container.appendChild(termDiv)
 
-    // Create WebSocket connection for this tab
-    const wsUrl = `ws://${window.location.hostname}:3001?host=${encodeURIComponent(host)}`
-    const ws = new WebSocket(wsUrl)
+      const term = new Terminal({
+        cursorBlink: true,
+        fontSize: 13,
+        fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+        theme: {
+          background: '#0f0f23',
+          foreground: '#eee',
+          cursor: '#fff',
+          selectionBackground: '#4a4a8a',
+        },
+      })
 
-    ws.onopen = () => {
-      if (isCleanedUp) return
-      setTabs(prev => prev.map(t =>
-        t.id === activeTabId ? { ...t, connected: true } : t
-      ))
-      setTimeout(() => {
-        if (!isCleanedUp) {
+      const fitAddon = new FitAddon()
+      term.loadAddon(fitAddon)
+      term.open(termDiv)
+
+      // Create WebSocket connection for this tab
+      const wsUrl = `ws://${window.location.hostname}:3001?host=${encodeURIComponent(host)}`
+      const ws = new WebSocket(wsUrl)
+      const tabId = tab.id
+
+      ws.onopen = () => {
+        setTabs(prev => prev.map(t =>
+          t.id === tabId ? { ...t, connected: true } : t
+        ))
+        setTimeout(() => {
           try {
             fitAddon.fit()
             ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }))
+            // Auto cd to workspace directory for new terminals and clear
+            if (workspacePath) {
+              const cdCommand = workspacePath.includes(' ') ? `cd "${workspacePath}" && clear\n` : `cd ${workspacePath} && clear\n`
+              ws.send(cdCommand)
+            } else {
+              ws.send('clear\n')
+            }
           } catch (e) {
             // Ignore
           }
+        }, 100)
+      }
+
+      ws.onclose = () => {
+        setTabs(prev => prev.map(t =>
+          t.id === tabId ? { ...t, connected: false } : t
+        ))
+      }
+
+      ws.onmessage = (event) => {
+        const data = event.data
+        try {
+          const parsed = JSON.parse(data)
+          if (parsed.type?.startsWith('file:')) return
+        } catch {
+          // Not JSON - terminal data
         }
-      }, 100)
-    }
-
-    ws.onclose = () => {
-      if (isCleanedUp) return
-      setTabs(prev => prev.map(t =>
-        t.id === activeTabId ? { ...t, connected: false } : t
-      ))
-    }
-
-    ws.onmessage = (event) => {
-      if (isCleanedUp) return
-      const data = event.data
-      try {
-        const parsed = JSON.parse(data)
-        if (parsed.type?.startsWith('file:')) return
-      } catch {
-        // Not JSON - terminal data
+        term.write(data)
       }
-      term.write(data)
-    }
 
-    const dataDisposable = term.onData((data) => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(data)
-      }
-    })
+      term.onData((data) => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(data)
+        }
+      })
 
-    const resizeObserver = new ResizeObserver(() => {
-      if (!isCleanedUp) {
+      // Add resize observer for this terminal
+      const resizeObserver = new ResizeObserver(() => {
         try {
           fitAddon.fit()
           if (ws.readyState === WebSocket.OPEN) {
@@ -180,20 +188,15 @@ export default function TerminalPanel({
         } catch (e) {
           // Ignore
         }
-      }
+      })
+      resizeObserver.observe(termDiv)
+
+      // Update tab with terminal instances
+      setTabs(prev => prev.map(t =>
+        t.id === tabId ? { ...t, ws, term, fitAddon, containerEl: termDiv } : t
+      ))
     })
-    resizeObserver.observe(container)
-
-    setTabs(prev => prev.map(t =>
-      t.id === activeTabId ? { ...t, ws, term, fitAddon } : t
-    ))
-
-    return () => {
-      isCleanedUp = true
-      resizeObserver.disconnect()
-      dataDisposable.dispose()
-    }
-  }, [activeTabId, host]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tabs, activeTabId, host, workspacePath])
 
   // Change directory when workspace changes
   useEffect(() => {
@@ -201,11 +204,33 @@ export default function TerminalPanel({
       lastWorkspacePath.current = workspacePath
       const tab = tabs.find(t => t.id === activeTabId)
       if (tab?.ws?.readyState === WebSocket.OPEN) {
-        const cdCommand = workspacePath.includes(' ') ? `cd "${workspacePath}"\n` : `cd ${workspacePath}\n`
+        const cdCommand = workspacePath.includes(' ') ? `cd "${workspacePath}" && clear\n` : `cd ${workspacePath} && clear\n`
         tab.ws.send(cdCommand)
       }
     }
   }, [workspacePath, activeTabId, tabs])
+
+  // Re-fit terminal when panel becomes visible
+  useEffect(() => {
+    if (isVisible) {
+      // Small delay to ensure container has proper dimensions
+      const timer = setTimeout(() => {
+        tabs.forEach(tab => {
+          if (tab.fitAddon && tab.ws?.readyState === WebSocket.OPEN) {
+            try {
+              tab.fitAddon.fit()
+              if (tab.term) {
+                tab.ws.send(JSON.stringify({ type: 'resize', cols: tab.term.cols, rows: tab.term.rows }))
+              }
+            } catch (e) {
+              // Ignore
+            }
+          }
+        })
+      }, 100)
+      return () => clearTimeout(timer)
+    }
+  }, [isVisible, tabs])
 
   const activeTab = tabs.find(t => t.id === activeTabId)
 

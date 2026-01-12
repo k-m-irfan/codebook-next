@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useCallback } from 'react'
+import { useRef, useCallback, useEffect } from 'react'
 import Editor, { type Monaco } from '@monaco-editor/react'
 import type { editor } from 'monaco-editor'
 
@@ -10,6 +10,15 @@ interface MonacoEditorProps {
   filename: string
   readOnly?: boolean
   onEditorMount?: (editor: editor.IStandaloneCodeEditor) => void
+}
+
+// Shared focus state - must be outside component to persist across re-renders and listener instances
+const focusState = {
+  focusAllowedUntil: 0,
+  touchStartPos: { x: 0, y: 0 },
+  touchStartTime: 0,
+  hasMoved: false,
+  listenersAttached: new WeakSet<HTMLElement>()
 }
 
 // Get language from filename extension
@@ -86,42 +95,62 @@ export default function MonacoEditor({
 }: MonacoEditorProps) {
   const language = getLanguage(filename)
   const editorInstanceRef = useRef<editor.IStandaloneCodeEditor | null>(null)
-  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null)
-  const isScrollingRef = useRef(false)
 
   const handleEditorDidMount = useCallback((editorInstance: editor.IStandaloneCodeEditor, monaco: Monaco) => {
     editorInstanceRef.current = editorInstance
 
-    // Blur editor initially to prevent keyboard on load
     const domNode = editorInstance.getDomNode()
-    if (domNode) {
-      // Prevent focus on touch move (scrolling)
-      domNode.addEventListener('touchstart', (e) => {
-        const touch = e.touches[0]
-        touchStartRef.current = { x: touch.clientX, y: touch.clientY, time: Date.now() }
-        isScrollingRef.current = false
-      }, { passive: true })
+    if (!domNode) return
 
-      domNode.addEventListener('touchmove', () => {
-        isScrollingRef.current = true
-        // Blur if scrolling to prevent keyboard
-        if (document.activeElement && domNode.contains(document.activeElement)) {
-          (document.activeElement as HTMLElement).blur?.()
-        }
-      }, { passive: true })
-
-      domNode.addEventListener('touchend', (e) => {
-        // Only allow focus if it was a tap (not scroll)
-        if (isScrollingRef.current) {
-          e.preventDefault()
-          const textarea = domNode.querySelector('textarea')
-          if (textarea) {
-            textarea.blur()
-          }
-        }
-        touchStartRef.current = null
-      })
+    // Prevent duplicate listeners using WeakSet
+    if (focusState.listenersAttached.has(domNode)) {
+      if (onEditorMount) onEditorMount(editorInstance)
+      return
     }
+    focusState.listenersAttached.add(domNode)
+
+    // Reset state for fresh start
+    focusState.focusAllowedUntil = 0
+    focusState.hasMoved = false
+
+    domNode.addEventListener('touchstart', (e) => {
+      const touch = e.touches[0]
+      focusState.touchStartPos = { x: touch.clientX, y: touch.clientY }
+      focusState.touchStartTime = Date.now()
+      focusState.hasMoved = false
+      focusState.focusAllowedUntil = 0
+    }, { passive: true })
+
+    domNode.addEventListener('touchmove', (e) => {
+      if (focusState.hasMoved) return
+      const touch = e.touches[0]
+      const dx = Math.abs(touch.clientX - focusState.touchStartPos.x)
+      const dy = Math.abs(touch.clientY - focusState.touchStartPos.y)
+      if (dx > 8 || dy > 8) {
+        focusState.hasMoved = true
+        focusState.focusAllowedUntil = 0
+      }
+    }, { passive: true })
+
+    domNode.addEventListener('touchend', () => {
+      const duration = Date.now() - focusState.touchStartTime
+      const isTap = !focusState.hasMoved && duration < 300
+
+      if (isTap) {
+        focusState.focusAllowedUntil = Date.now() + 300
+        const ta = domNode.querySelector('textarea') as HTMLTextAreaElement | null
+        if (ta) ta.focus()
+      }
+    }, { passive: true })
+
+    // Use focusin with capture to intercept ALL focus attempts
+    domNode.addEventListener('focusin', (e) => {
+      if (e.target instanceof HTMLTextAreaElement) {
+        if (Date.now() > focusState.focusAllowedUntil) {
+          (e.target as HTMLTextAreaElement).blur()
+        }
+      }
+    }, { capture: true })
 
     if (onEditorMount) {
       onEditorMount(editorInstance)

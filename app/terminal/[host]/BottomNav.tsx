@@ -48,9 +48,11 @@ export default function BottomNav({
           border-top: 1px solid #2a2a4a;
           padding: 6px 0;
           padding-bottom: max(6px, env(safe-area-inset-bottom));
-          position: relative;
+          position: fixed;
+          bottom: 0;
+          left: 0;
+          right: 0;
           z-index: 100;
-          flex-shrink: 0;
         }
         .nav-btn {
           display: flex;
