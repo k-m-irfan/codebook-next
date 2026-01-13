@@ -36,20 +36,33 @@ export function useKeyboardHeight(): KeyboardState {
       return
     }
 
-    // Store initial height to detect keyboard
-    const initialHeight = window.innerHeight
+    // Track baseline height - resets on orientation change
+    let baselineHeight = window.innerHeight
+    // Track orientation to detect changes (portrait vs landscape)
+    let isLandscape = window.innerWidth > window.innerHeight
+
     // Threshold: keyboard is visible if viewport shrinks by more than 150px
     // This accounts for minor browser chrome changes
     const KEYBOARD_THRESHOLD = 150
 
     const handleResize = () => {
-      // Calculate the difference between full window and visual viewport
+      // Detect orientation change
+      const currentIsLandscape = window.innerWidth > window.innerHeight
+
+      if (currentIsLandscape !== isLandscape) {
+        // Orientation changed - reset baseline height
+        // Use window.innerHeight as the new baseline for this orientation
+        baselineHeight = window.innerHeight
+        isLandscape = currentIsLandscape
+      }
+
+      // Calculate the difference between baseline and visual viewport
       // On iOS, visualViewport.height decreases when keyboard appears
       // On Android, similar behavior
       const viewportHeight = vv.height
       const offsetTop = vv.offsetTop || 0
 
-      const heightDiff = initialHeight - (viewportHeight + offsetTop)
+      const heightDiff = baselineHeight - (viewportHeight + offsetTop)
       const isKeyboardVisible = heightDiff > KEYBOARD_THRESHOLD
 
       setState({
@@ -59,10 +72,24 @@ export function useKeyboardHeight(): KeyboardState {
       })
     }
 
+    // Handle orientation change event specifically
+    const handleOrientationChange = () => {
+      // Give browser time to update dimensions after rotation
+      setTimeout(() => {
+        baselineHeight = window.innerHeight
+        isLandscape = window.innerWidth > window.innerHeight
+        handleResize()
+      }, 100)
+    }
+
     // Listen to visualViewport resize
     vv.addEventListener('resize', handleResize)
     // Also listen to scroll (iOS may fire scroll instead of resize in some cases)
     vv.addEventListener('scroll', handleResize)
+    // Listen for orientation changes
+    window.addEventListener('orientationchange', handleOrientationChange)
+    // Also listen to window resize for desktop/emulator orientation changes
+    window.addEventListener('resize', handleResize)
 
     // Initial calculation
     handleResize()
@@ -70,6 +97,8 @@ export function useKeyboardHeight(): KeyboardState {
     return () => {
       vv.removeEventListener('resize', handleResize)
       vv.removeEventListener('scroll', handleResize)
+      window.removeEventListener('orientationchange', handleOrientationChange)
+      window.removeEventListener('resize', handleResize)
     }
   }, [])
 
