@@ -44,6 +44,7 @@ export default function LocalTerminalPage() {
             host="local"
             workspacePath=""
             isVisible={true}
+            isKeyboardVisible={isKeyboardVisible}
           />
         </div>
 

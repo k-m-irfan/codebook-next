@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import { useConnection } from './ConnectionContext'
 import type { OpenFile } from './page'
 import type { editor } from 'monaco-editor'
+import QuickKeysPanel, { QuickKeysPanelRef } from './QuickKeysPanel'
 
 const MonacoEditor = dynamic(() => import('./MonacoEditor'), {
   ssr: false,
@@ -52,6 +53,8 @@ export default function EditorArea({
   const [saving, setSaving] = useState(false)
   const [actionsExpanded, setActionsExpanded] = useState(false)
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
+  const quickKeyModifiersRef = useRef({ ctrl: false, alt: false, shift: false })
+  const quickKeysPanelRef = useRef<QuickKeysPanelRef>(null)
 
   const activeFile = activeIndex >= 0 && activeIndex < files.length ? files[activeIndex] : null
 
@@ -119,6 +122,107 @@ export default function EditorArea({
 
   const toggleActions = useCallback(() => {
     setActionsExpanded(prev => !prev)
+  }, [])
+
+  // Handler for quick key modifier changes
+  const handleModifierChange = useCallback((mods: { ctrl: boolean; alt: boolean; shift: boolean }) => {
+    quickKeyModifiersRef.current = mods
+  }, [])
+
+  // Handle keyboard input with modifiers for editor
+  // Use beforeinput for mobile compatibility (mobile doesn't fire keydown reliably)
+  useEffect(() => {
+    if (!keyboardVisible) return
+
+    const handleBeforeInput = (e: InputEvent) => {
+      const mods = quickKeyModifiersRef.current
+      if (!mods.ctrl && !mods.alt && !mods.shift) return
+      if (!editorRef.current) return
+      if (!e.data) return // No data to process
+
+      const editor = editorRef.current
+      const inputText = e.data
+
+      // Handle Ctrl+key combinations
+      if (mods.ctrl && inputText.length === 1) {
+        e.preventDefault()
+
+        const lowerKey = inputText.toLowerCase()
+
+        // Map common Ctrl shortcuts to Monaco actions
+        switch (lowerKey) {
+          case 'a': editor.trigger('keyboard', 'editor.action.selectAll', null); break
+          case 'c': editor.trigger('keyboard', 'editor.action.clipboardCopyAction', null); break
+          case 'v': editor.trigger('keyboard', 'editor.action.clipboardPasteAction', null); break
+          case 'x': editor.trigger('keyboard', 'editor.action.clipboardCutAction', null); break
+          case 'z': editor.trigger('keyboard', 'undo', null); break
+          case 'y': editor.trigger('keyboard', 'redo', null); break
+          case 'f': editor.trigger('keyboard', 'actions.find', null); break
+          case 's': handleSave(); break
+          case 'd': editor.trigger('keyboard', 'editor.action.addSelectionToNextFindMatch', null); break
+          default: break
+        }
+
+        // Clear modifiers after use (both ref and visual)
+        quickKeyModifiersRef.current = { ctrl: false, alt: false, shift: false }
+        quickKeysPanelRef.current?.resetModifiers()
+        return
+      }
+
+      // Handle Alt+key - insert character with alt modifier behavior
+      if (mods.alt && inputText.length === 1) {
+        e.preventDefault()
+        editor.trigger('keyboard', 'type', { text: inputText })
+        quickKeyModifiersRef.current = { ctrl: false, alt: false, shift: false }
+        quickKeysPanelRef.current?.resetModifiers()
+        return
+      }
+
+      // Handle Shift+key - insert uppercase or shifted character
+      if (mods.shift && inputText.length === 1) {
+        e.preventDefault()
+        editor.trigger('keyboard', 'type', { text: inputText.toUpperCase() })
+        quickKeyModifiersRef.current = { ctrl: false, alt: false, shift: false }
+        quickKeysPanelRef.current?.resetModifiers()
+        return
+      }
+    }
+
+    // Capture at document level to intercept before Monaco
+    document.addEventListener('beforeinput', handleBeforeInput as EventListener, true)
+    return () => document.removeEventListener('beforeinput', handleBeforeInput as EventListener, true)
+  }, [keyboardVisible, handleSave])
+
+  // Handler for quick keys panel in editor
+  const handleQuickKeyPress = useCallback((key: string) => {
+    if (!editorRef.current) return
+
+    const editor = editorRef.current
+
+    // Handle special keys
+    switch (key) {
+      case '\x1b': // Escape
+        editor.trigger('keyboard', 'closeFindWidget', null)
+        return
+      case '\x01': // Ctrl+A / Home - beginning of line
+        editor.trigger('keyboard', 'cursorHome', null)
+        return
+      case '\x05': // Ctrl+E / End - end of line
+        editor.trigger('keyboard', 'cursorEnd', null)
+        return
+      case '\x1b[5~': // Page Up
+        editor.trigger('keyboard', 'cursorPageUp', null)
+        return
+      case '\x1b[6~': // Page Down
+        editor.trigger('keyboard', 'cursorPageDown', null)
+        return
+      case '\t': // Tab - insert tab or trigger autocomplete
+        editor.trigger('keyboard', 'tab', null)
+        return
+    }
+
+    // For regular characters, insert them at cursor position
+    editor.trigger('keyboard', 'type', { text: key })
   }, [])
 
   // No files open - show welcome screen
@@ -217,7 +321,10 @@ export default function EditorArea({
 
         {/* Collapsible floating action buttons - bottom right */}
         {activeFile && (
-          <div className={`floating-actions ${actionsExpanded ? 'expanded' : ''}`}>
+          <div
+            className={`floating-actions ${actionsExpanded ? 'expanded' : ''}`}
+            onMouseDown={(e) => e.preventDefault()}
+          >
             {actionsExpanded ? (
               <>
                 <button
@@ -269,6 +376,11 @@ export default function EditorArea({
           </div>
         )}
       </div>
+
+      {/* Quick keys panel - shown when keyboard is visible */}
+      {keyboardVisible && (
+        <QuickKeysPanel ref={quickKeysPanelRef} onKeyPress={handleQuickKeyPress} onModifierChange={handleModifierChange} />
+      )}
 
       <style jsx>{`
         .editor-area {

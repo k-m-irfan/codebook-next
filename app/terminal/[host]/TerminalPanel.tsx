@@ -5,6 +5,7 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import { usePassword } from './PasswordContext'
+import QuickKeysPanel, { QuickKeysPanelRef } from './QuickKeysPanel'
 
 interface TerminalTab {
   id: string
@@ -20,12 +21,14 @@ interface TerminalPanelProps {
   host: string
   workspacePath: string
   isVisible?: boolean
+  isKeyboardVisible?: boolean
 }
 
 export default function TerminalPanel({
   host,
   workspacePath,
   isVisible = false,
+  isKeyboardVisible = false,
 }: TerminalPanelProps) {
   const { password: cachedPassword, setPassword: setCachedPassword } = usePassword()
 
@@ -50,6 +53,8 @@ export default function TerminalPanel({
   const lastWorkspacePath = useRef<string>('')
   const gestureModeRef = useRef(true) // Ref for touch handlers to access current state
   const tabCompletionPendingRef = useRef<Set<string>>(new Set()) // Track TAB completion state per terminal
+  const quickKeyModifiersRef = useRef({ ctrl: false, alt: false, shift: false }) // Track quick key modifiers
+  const quickKeysPanelRef = useRef<QuickKeysPanelRef>(null) // Ref to reset modifiers visually
 
   // Keep ref in sync with state for touch handlers
   // Also update viewport overflow style directly
@@ -294,18 +299,44 @@ export default function TerminalPanel({
 
       term.onData((data) => {
         if (ws.readyState === WebSocket.OPEN) {
+          let dataToSend = data
+
+          // Apply quick key modifiers to single character input
+          const mods = quickKeyModifiersRef.current
+          if ((mods.ctrl || mods.alt || mods.shift) && data.length === 1) {
+            const charCode = data.charCodeAt(0)
+
+            if (mods.ctrl) {
+              // Convert to control character (a-z and A-Z)
+              if ((charCode >= 97 && charCode <= 122) || (charCode >= 65 && charCode <= 90)) {
+                const lowerCharCode = data.toLowerCase().charCodeAt(0)
+                dataToSend = String.fromCharCode(lowerCharCode - 96)
+              }
+            } else if (mods.alt) {
+              // Alt + char = ESC + char
+              dataToSend = '\x1b' + data
+            } else if (mods.shift) {
+              // Shift = uppercase
+              dataToSend = data.toUpperCase()
+            }
+
+            // Clear modifiers after use (both ref and visual state)
+            quickKeyModifiersRef.current = { ctrl: false, alt: false, shift: false }
+            quickKeysPanelRef.current?.resetModifiers()
+          }
+
           // Clear completion pending state on Enter or Escape (user committed or cancelled)
-          if (data === '\r' || data === '\x1b') {
+          if (dataToSend === '\r' || dataToSend === '\x1b') {
             tabCompletionPendingRef.current.delete(tabId)
-            ws.send(data)
+            ws.send(dataToSend)
             return
           }
           // If TAB completion list is showing and user types anything (except TAB),
           // send the character first, then clear screen to remove completion list
-          if (tabCompletionPendingRef.current.has(tabId) && data.length > 0 && data !== '\t') {
+          if (tabCompletionPendingRef.current.has(tabId) && dataToSend.length > 0 && dataToSend !== '\t') {
             tabCompletionPendingRef.current.delete(tabId)
             // Send character first so shell registers it
-            ws.send(data)
+            ws.send(dataToSend)
             // Then clear screen after a delay to remove completion list
             setTimeout(() => {
               if (ws.readyState === WebSocket.OPEN) {
@@ -314,7 +345,7 @@ export default function TerminalPanel({
             }, 100)
             return
           }
-          ws.send(data)
+          ws.send(dataToSend)
         }
       })
 
@@ -638,6 +669,19 @@ export default function TerminalPanel({
     setPendingTabId(null)
   }, [pendingTabId, tabs])
 
+  // Handler for quick keys panel
+  const handleQuickKeyPress = useCallback((key: string) => {
+    const tab = tabs.find(t => t.id === activeTabId)
+    if (tab?.ws?.readyState === WebSocket.OPEN) {
+      tab.ws.send(key)
+    }
+  }, [tabs, activeTabId])
+
+  // Handler for quick key modifier changes
+  const handleModifierChange = useCallback((mods: { ctrl: boolean; alt: boolean; shift: boolean }) => {
+    quickKeyModifiersRef.current = mods
+  }, [])
+
   return (
     <div className={`terminal-panel ${gestureMode ? 'gesture-mode' : 'scroll-mode'}`}>
       <div className="panel-header">
@@ -670,9 +714,25 @@ export default function TerminalPanel({
       </div>
       <div className="terminal-wrapper">
         <div ref={containerRef} className="terminal-container" />
+        {isKeyboardVisible && (
+          <QuickKeysPanel ref={quickKeysPanelRef} onKeyPress={handleQuickKeyPress} onModifierChange={handleModifierChange} />
+        )}
         <button
-          className={`gesture-toggle ${gestureMode ? 'active' : ''}`}
-          onClick={() => setGestureMode(!gestureMode)}
+          className={`gesture-toggle ${gestureMode ? 'active' : ''} ${isKeyboardVisible ? 'keyboard-visible' : ''}`}
+          onMouseDown={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            setGestureMode(!gestureMode)
+          }}
+          onTouchStart={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+          }}
+          onTouchEnd={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            setGestureMode(!gestureMode)
+          }}
           title={gestureMode ? 'Gesture Mode (tap to switch to scroll)' : 'Scroll Mode (tap to switch to gesture)'}
         >
           {gestureMode ? <GestureIcon /> : <ScrollIcon />}
@@ -815,6 +875,9 @@ export default function TerminalPanel({
         .gesture-toggle:hover {
           background: #3a3a5a;
           color: #fff;
+        }
+        .gesture-toggle.keyboard-visible {
+          bottom: 64px;
         }
         .gesture-toggle.active {
           background: #4a4a8a;

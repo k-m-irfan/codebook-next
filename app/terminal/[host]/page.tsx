@@ -188,6 +188,7 @@ export default function TerminalPage() {
               host={host}
               workspacePath={workspacePath}
               isVisible={isTerminalFullscreen}
+              isKeyboardVisible={isKeyboardVisible}
             />
           </div>
 
