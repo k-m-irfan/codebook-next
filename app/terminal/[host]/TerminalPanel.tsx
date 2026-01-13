@@ -48,6 +48,37 @@ export default function TerminalPanel({
   const tabCounter = useRef(0)
   const lastWorkspacePath = useRef<string>('')
 
+  // Write buffer for batching terminal output using requestAnimationFrame
+  const writeBuffers = useRef<Map<string, string[]>>(new Map())
+  const rafIds = useRef<Map<string, number>>(new Map())
+
+  // Flush buffered writes on animation frame for smooth scrolling
+  const flushWrites = useCallback((tabId: string, term: Terminal) => {
+    const buffer = writeBuffers.current.get(tabId)
+    if (buffer && buffer.length > 0) {
+      const data = buffer.join('')
+      buffer.length = 0
+      term.write(data)
+    }
+    rafIds.current.delete(tabId)
+  }, [])
+
+  // Queue data for batched writing
+  const queueWrite = useCallback((tabId: string, term: Terminal, data: string) => {
+    let buffer = writeBuffers.current.get(tabId)
+    if (!buffer) {
+      buffer = []
+      writeBuffers.current.set(tabId, buffer)
+    }
+    buffer.push(data)
+
+    // Schedule flush if not already scheduled
+    if (!rafIds.current.has(tabId)) {
+      const rafId = requestAnimationFrame(() => flushWrites(tabId, term))
+      rafIds.current.set(tabId, rafId)
+    }
+  }, [flushWrites])
+
   // Create a new terminal tab
   const createTab = useCallback(() => {
     const id = `term-${Date.now()}-${++tabCounter.current}`
@@ -139,11 +170,106 @@ export default function TerminalPanel({
           cursor: '#fff',
           selectionBackground: '#4a4a8a',
         },
+        // Scrolling performance options
+        scrollback: 5000,
+        fastScrollModifier: 'alt',
+        fastScrollSensitivity: 5,
+        scrollSensitivity: 1,
       })
 
       const fitAddon = new FitAddon()
       term.loadAddon(fitAddon)
       term.open(termDiv)
+
+      // Custom touch scroll handler with momentum based on swipe velocity
+      const viewport = termDiv.querySelector('.xterm-viewport') as HTMLElement
+      if (viewport) {
+        // Disable any default touch handling
+        viewport.style.touchAction = 'none'
+
+        let isScrolling = false
+        let lastY = 0
+        let velocityY = 0
+        let animFrameId: number | null = null
+
+        // Track position history to calculate accurate velocity
+        const history: { y: number; t: number }[] = []
+
+        const cancelMomentum = () => {
+          if (animFrameId !== null) {
+            cancelAnimationFrame(animFrameId)
+            animFrameId = null
+          }
+        }
+
+        const doMomentum = () => {
+          viewport.scrollTop += velocityY
+          velocityY *= 0.97 // Decay factor - higher = longer momentum
+
+          if (Math.abs(velocityY) > 0.3) {
+            animFrameId = requestAnimationFrame(doMomentum)
+          } else {
+            animFrameId = null
+          }
+        }
+
+        const onStart = (e: TouchEvent) => {
+          cancelMomentum()
+          isScrolling = true
+          lastY = e.touches[0].clientY
+          history.length = 0
+          history.push({ y: lastY, t: e.timeStamp })
+        }
+
+        const onMove = (e: TouchEvent) => {
+          if (!isScrolling) return
+          e.preventDefault()
+
+          const y = e.touches[0].clientY
+          const deltaY = lastY - y
+
+          // Track history for velocity (keep last 100ms)
+          history.push({ y, t: e.timeStamp })
+          const cutoff = e.timeStamp - 100
+          while (history.length > 2 && history[0].t < cutoff) {
+            history.shift()
+          }
+
+          viewport.scrollTop += deltaY
+          lastY = y
+        }
+
+        const onEnd = (e: TouchEvent) => {
+          if (!isScrolling) return
+          isScrolling = false
+
+          // Calculate velocity from position history (not just last frame)
+          if (history.length >= 2) {
+            const first = history[0]
+            const last = history[history.length - 1]
+            const dy = first.y - last.y // Scroll direction
+            const dt = last.t - first.t
+
+            if (dt > 0 && dt < 300) { // Only if gesture was fast enough
+              // Convert to pixels per frame at 60fps, with boost
+              velocityY = (dy / dt) * 16 * 2.5
+
+              // Apply momentum
+              if (Math.abs(velocityY) > 1) {
+                animFrameId = requestAnimationFrame(doMomentum)
+              }
+            }
+          }
+
+          history.length = 0
+        }
+
+        // Capture phase to intercept before xterm
+        viewport.addEventListener('touchstart', onStart, { passive: true, capture: true })
+        viewport.addEventListener('touchmove', onMove, { passive: false, capture: true })
+        viewport.addEventListener('touchend', onEnd, { passive: true, capture: true })
+        viewport.addEventListener('touchcancel', onEnd, { passive: true, capture: true })
+      }
 
       // Create WebSocket connection for this tab
       const wsUrl = `ws://${window.location.hostname}:3001?host=${encodeURIComponent(host)}`
@@ -214,7 +340,8 @@ export default function TerminalPanel({
             sendInitialCommands()
           }
         }
-        term.write(data)
+        // Use batched writes for smooth scrolling
+        queueWrite(tabId, term, data)
       }
 
       term.onData((data) => {
@@ -223,16 +350,20 @@ export default function TerminalPanel({
         }
       })
 
-      // Add resize observer for this terminal
+      // Add debounced resize observer for this terminal
+      let resizeTimeout: ReturnType<typeof setTimeout> | null = null
       const resizeObserver = new ResizeObserver(() => {
-        try {
-          fitAddon.fit()
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }))
+        if (resizeTimeout) clearTimeout(resizeTimeout)
+        resizeTimeout = setTimeout(() => {
+          try {
+            fitAddon.fit()
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }))
+            }
+          } catch (e) {
+            // Ignore
           }
-        } catch (e) {
-          // Ignore
-        }
+        }, 50) // Debounce resize operations
       })
       resizeObserver.observe(termDiv)
 
@@ -241,7 +372,7 @@ export default function TerminalPanel({
         t.id === tabId ? { ...t, ws, term, fitAddon, containerEl: termDiv } : t
       ))
     })
-  }, [tabs, activeTabId, host, workspacePath, cachedPassword])
+  }, [tabs, activeTabId, host, workspacePath, cachedPassword, queueWrite])
 
   // Change directory when workspace changes
   useEffect(() => {
