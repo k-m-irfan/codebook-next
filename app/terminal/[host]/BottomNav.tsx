@@ -105,9 +105,11 @@ export default function BottomNav({
             padding: 6px;
             padding-left: max(6px, env(safe-area-inset-left));
             padding-bottom: 6px;
+            transform: translateX(0);
           }
           .bottom-nav.hidden {
             transform: translateX(-100%);
+            visibility: hidden;
           }
           .nav-btn {
             padding: 10px 6px;
