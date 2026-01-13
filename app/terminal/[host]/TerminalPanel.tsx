@@ -333,6 +333,10 @@ export default function TerminalPanel({
         let startTime = 0
         let lastTapTime = 0
         let gestureTriggered = false
+        let lastGestureX = 0
+        let lastGestureY = 0
+        let cumulativeX = 0
+        let cumulativeY = 0
 
         // Arrow key escape codes
         const ARROW_UP = '\x1b[A'
@@ -342,6 +346,7 @@ export default function TerminalPanel({
         const TAB_KEY = '\t'
 
         const SWIPE_THRESHOLD = 30 // Min pixels for swipe
+        const GESTURE_STEP = 25 // Pixels per arrow key in continuous gesture
         const DOUBLE_TAP_DELAY = 300 // Max ms between taps
 
         const cancelMomentum = () => {
@@ -376,7 +381,13 @@ export default function TerminalPanel({
           gestureTriggered = false
 
           if (gestureModeRef.current) {
-            // Gesture mode - check for double tap
+            // Gesture mode - reset tracking for continuous gesture
+            lastGestureX = touch.clientX
+            lastGestureY = touch.clientY
+            cumulativeX = 0
+            cumulativeY = 0
+
+            // Check for double tap
             const timeSinceLastTap = startTime - lastTapTime
             if (timeSinceLastTap < DOUBLE_TAP_DELAY) {
               // Double tap detected - send tab
@@ -401,7 +412,41 @@ export default function TerminalPanel({
           e.preventDefault()
 
           if (gestureModeRef.current) {
-            // Gesture mode - don't scroll, handled on end
+            // Gesture mode - send keys continuously based on movement
+            const touch = e.touches[0]
+            const deltaX = touch.clientX - lastGestureX
+            const deltaY = touch.clientY - lastGestureY
+
+            lastGestureX = touch.clientX
+            lastGestureY = touch.clientY
+
+            cumulativeX += deltaX
+            cumulativeY += deltaY
+
+            // Send horizontal keys
+            while (Math.abs(cumulativeX) >= GESTURE_STEP) {
+              if (cumulativeX > 0) {
+                sendKey(ARROW_RIGHT)
+                cumulativeX -= GESTURE_STEP
+              } else {
+                sendKey(ARROW_LEFT)
+                cumulativeX += GESTURE_STEP
+              }
+              gestureTriggered = true
+            }
+
+            // Send vertical keys
+            while (Math.abs(cumulativeY) >= GESTURE_STEP) {
+              if (cumulativeY > 0) {
+                sendKey(ARROW_DOWN)
+                cumulativeY -= GESTURE_STEP
+              } else {
+                sendKey(ARROW_UP)
+                cumulativeY += GESTURE_STEP
+              }
+              gestureTriggered = true
+            }
+
             return
           }
 
@@ -436,27 +481,10 @@ export default function TerminalPanel({
           const deltaY = endY - startY
 
           if (gestureModeRef.current) {
-            // Gesture mode - detect swipe direction
-            const absX = Math.abs(deltaX)
-            const absY = Math.abs(deltaY)
-
-            if (absX > SWIPE_THRESHOLD || absY > SWIPE_THRESHOLD) {
-              if (absX > absY) {
-                // Horizontal swipe
-                if (deltaX > 0) {
-                  sendKey(ARROW_RIGHT)
-                } else {
-                  sendKey(ARROW_LEFT)
-                }
-              } else {
-                // Vertical swipe
-                if (deltaY > 0) {
-                  sendKey(ARROW_DOWN)
-                } else {
-                  sendKey(ARROW_UP)
-                }
-              }
-              lastTapTime = 0 // Reset tap detection after swipe
+            // Gesture mode - keys sent during move, just handle tap detection
+            if (gestureTriggered) {
+              // Swipe occurred, reset tap detection
+              lastTapTime = 0
             } else {
               // No swipe - record tap time for double tap detection
               lastTapTime = endTime
