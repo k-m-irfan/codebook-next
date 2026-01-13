@@ -566,13 +566,19 @@ app.prepare().then(() => {
         const msg = message.toString()
         try {
           const parsed = JSON.parse(msg)
-          console.log('Local WS received JSON message:', parsed.type)
-          if (parsed.type === 'resize') {
-            ptyProcess.resize(parsed.cols, parsed.rows)
-          } else if (parsed.type?.startsWith('file:')) {
-            // Handle file operations
-            console.log('Routing to handleLocalFileOperation')
-            handleLocalFileOperation(ws, parsed)
+          // Only treat as JSON command if it's an object with a type property
+          if (parsed && typeof parsed === 'object' && parsed.type) {
+            console.log('Local WS received JSON message:', parsed.type)
+            if (parsed.type === 'resize') {
+              ptyProcess.resize(parsed.cols, parsed.rows)
+            } else if (parsed.type?.startsWith('file:')) {
+              // Handle file operations
+              console.log('Routing to handleLocalFileOperation')
+              handleLocalFileOperation(ws, parsed)
+            }
+          } else {
+            // Valid JSON but not a command object - treat as terminal input
+            ptyProcess.write(msg)
           }
         } catch {
           // Not JSON, treat as terminal input
@@ -649,35 +655,43 @@ app.prepare().then(() => {
         const msg = message.toString()
         try {
           const parsed = JSON.parse(msg)
-          if (parsed.type === 'resize') {
+          // Only treat as JSON command if it's an object with a type property
+          if (parsed && typeof parsed === 'object' && parsed.type) {
+            if (parsed.type === 'resize') {
+              if (shellStream) {
+                shellStream.setWindow(parsed.rows, parsed.cols, 0, 0)
+              }
+            } else if (parsed.type === 'auth:password') {
+              // Handle password submission
+              if (passwordResolver) {
+                passwordResolver(parsed.responses || [parsed.password])
+                passwordResolver = null
+              }
+            } else if (parsed.type?.startsWith('file:')) {
+              // Handle file operations via SFTP
+              if (!sftpSession) {
+                // Lazy-initialize SFTP session
+                conn.sftp((err, sftp) => {
+                  if (err) {
+                    ws.send(JSON.stringify({
+                      type: 'file:operation:response',
+                      requestId: parsed.requestId,
+                      success: false,
+                      error: `SFTP error: ${err.message}`,
+                    }))
+                    return
+                  }
+                  sftpSession = sftp
+                  handleSFTPFileOperation(ws, sftp, parsed)
+                })
+              } else {
+                handleSFTPFileOperation(ws, sftpSession, parsed)
+              }
+            }
+          } else {
+            // Valid JSON but not a command object - treat as terminal input
             if (shellStream) {
-              shellStream.setWindow(parsed.rows, parsed.cols, 0, 0)
-            }
-          } else if (parsed.type === 'auth:password') {
-            // Handle password submission
-            if (passwordResolver) {
-              passwordResolver(parsed.responses || [parsed.password])
-              passwordResolver = null
-            }
-          } else if (parsed.type?.startsWith('file:')) {
-            // Handle file operations via SFTP
-            if (!sftpSession) {
-              // Lazy-initialize SFTP session
-              conn.sftp((err, sftp) => {
-                if (err) {
-                  ws.send(JSON.stringify({
-                    type: 'file:operation:response',
-                    requestId: parsed.requestId,
-                    success: false,
-                    error: `SFTP error: ${err.message}`,
-                  }))
-                  return
-                }
-                sftpSession = sftp
-                handleSFTPFileOperation(ws, sftp, parsed)
-              })
-            } else {
-              handleSFTPFileOperation(ws, sftpSession, parsed)
+              shellStream.write(msg)
             }
           }
         } catch {
