@@ -319,9 +319,10 @@ export default function TerminalPage() {
           }
         }
 
-        @media (orientation: landscape) and (max-height: 500px) {
+        @media (orientation: landscape) and (max-height: 500px),
+               (orientation: landscape) and (min-width: 1024px) {
           .session-container {
-            --left-nav-width: 70px;
+            --left-nav-width: calc(64px + env(safe-area-inset-left, 0px));
           }
           .content-area {
             padding-left: var(--left-nav-width);

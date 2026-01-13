@@ -66,9 +66,10 @@ export default function LocalTerminalPage() {
             padding-bottom: ${isKeyboardVisible ? '0' : 'var(--bottom-nav-height)'};
           }
 
-          @media (orientation: landscape) and (max-height: 500px) {
+          @media (orientation: landscape) and (max-height: 500px),
+                 (orientation: landscape) and (min-width: 1024px) {
             .local-terminal-container {
-              --left-nav-width: 70px;
+              --left-nav-width: calc(64px + env(safe-area-inset-left, 0px));
             }
             .terminal-content {
               padding-left: var(--left-nav-width);
