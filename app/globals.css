@@ -84,6 +84,75 @@ body {
   background: #2a2a4a;
 }
 
+.host-item {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  background: #1a1a2e;
+  border: 1px solid #2a2a4a;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.host-item:hover {
+  background: #2a2a4a;
+  border-color: #4a4a8a;
+}
+
+.host-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.host-name {
+  font-weight: 500;
+  color: #fff;
+}
+
+.host-detail {
+  font-size: 0.8rem;
+  color: #888;
+}
+
+.host-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: 1px solid #3a3a5a;
+  border-radius: 6px;
+  color: #888;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.action-btn:hover {
+  background: #3a3a5a;
+  color: #fff;
+  border-color: #5a5a8a;
+}
+
+.action-btn.delete {
+  color: #f66;
+  border-color: #6a3a3a;
+}
+
+.action-btn.delete:hover {
+  background: #4a2a2a;
+  color: #f88;
+  border-color: #8a4a4a;
+}
+
 .empty-state {
   text-align: center;
   color: #666;
@@ -284,6 +353,21 @@ body {
 }
 
 .btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-danger {
+  background: #a33;
+  border: none;
+  color: #fff;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #c44;
+}
+
+.btn-danger:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

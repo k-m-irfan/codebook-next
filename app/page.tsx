@@ -17,7 +17,11 @@ export default function Home() {
   const [hosts, setHosts] = useState<SSHHost[]>([])
   const [activeTab, setActiveTab] = useState<Tab>('hosts')
   const [showAddModal, setShowAddModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [newHost, setNewHost] = useState<SSHHost>({ name: '', hostname: '', user: '', port: '' })
+  const [editHost, setEditHost] = useState<SSHHost & { oldName: string }>({ oldName: '', name: '', hostname: '', user: '', port: '' })
+  const [deleteHostName, setDeleteHostName] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -151,6 +155,82 @@ export default function Home() {
     }
   }
 
+  const handleEditHost = async () => {
+    if (!editHost.name.trim()) {
+      setError('Host name is required')
+      return
+    }
+
+    setSaving(true)
+    setError('')
+
+    try {
+      const res = await fetch('/api/hosts', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editHost),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        setError(data.error || 'Failed to update host')
+        return
+      }
+
+      setShowEditModal(false)
+      setEditHost({ oldName: '', name: '', hostname: '', user: '', port: '' })
+      fetchHosts()
+    } catch (err) {
+      setError('Failed to update host')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDeleteHost = async () => {
+    setSaving(true)
+    setError('')
+
+    try {
+      const res = await fetch(`/api/hosts?name=${encodeURIComponent(deleteHostName)}`, {
+        method: 'DELETE',
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        setError(data.error || 'Failed to delete host')
+        return
+      }
+
+      setShowDeleteModal(false)
+      setDeleteHostName('')
+      fetchHosts()
+    } catch (err) {
+      setError('Failed to delete host')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const openEditModal = (host: SSHHost) => {
+    setEditHost({
+      oldName: host.name,
+      name: host.name,
+      hostname: host.hostname || '',
+      user: host.user || '',
+      port: host.port || '',
+    })
+    setError('')
+    setShowEditModal(true)
+  }
+
+  const openDeleteModal = (name: string) => {
+    setDeleteHostName(name)
+    setShowDeleteModal(true)
+  }
+
   return (
     <div className="app">
       <main className="content">
@@ -162,11 +242,27 @@ export default function Home() {
                 <button className="host-btn local" onClick={() => openTerminal('local')}>
                   Local
                 </button>
-                <button className="host-btn add" onClick={() => setShowAddModal(true)}>+ Add</button>
+                <button className="host-btn add" onClick={() => setShowAddModal(true)}>+ Add Remote</button>
                 {hosts.map((host) => (
-                  <button key={host.name} className="host-btn" onClick={() => openTerminal(host.name)}>
-                    {host.name}
-                  </button>
+                  <div key={host.name} className="host-item" onClick={() => openTerminal(host.name)}>
+                    <div className="host-info">
+                      <span className="host-name">{host.name}</span>
+                    </div>
+                    <div className="host-actions">
+                      <button className="action-btn" onClick={(e) => { e.stopPropagation(); openEditModal(host); }} title="Edit">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                        </svg>
+                      </button>
+                      <button className="action-btn delete" onClick={(e) => { e.stopPropagation(); openDeleteModal(host.name); }} title="Delete">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
@@ -318,6 +414,90 @@ export default function Home() {
               </button>
               <button className="btn btn-primary" onClick={handleAddHost} disabled={saving}>
                 {saving ? 'Adding...' : 'Add Host'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Host Modal */}
+      {showEditModal && (
+        <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h2 className="modal-title">Edit SSH Host</h2>
+
+            {error && <div className="modal-error">{error}</div>}
+
+            <div className="form-group">
+              <label className="form-label">Name *</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="my-server"
+                value={editHost.name}
+                onChange={e => setEditHost({ ...editHost, name: e.target.value })}
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Hostname</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="192.168.1.100 or example.com"
+                value={editHost.hostname}
+                onChange={e => setEditHost({ ...editHost, hostname: e.target.value })}
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">User</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="root"
+                value={editHost.user}
+                onChange={e => setEditHost({ ...editHost, user: e.target.value })}
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Port</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="22"
+                value={editHost.port}
+                onChange={e => setEditHost({ ...editHost, port: e.target.value })}
+              />
+            </div>
+
+            <div className="modal-actions">
+              <button className="btn btn-cancel" onClick={() => setShowEditModal(false)}>
+                Cancel
+              </button>
+              <button className="btn btn-primary" onClick={handleEditHost} disabled={saving}>
+                {saving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="modal-overlay" onClick={() => setShowDeleteModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h2 className="modal-title">Delete Host</h2>
+            <p style={{ color: '#aaa', marginBottom: '20px' }}>
+              Are you sure you want to delete <strong style={{ color: '#fff' }}>{deleteHostName}</strong>? This will remove it from your SSH config.
+            </p>
+            <div className="modal-actions">
+              <button className="btn btn-cancel" onClick={() => setShowDeleteModal(false)}>
+                Cancel
+              </button>
+              <button className="btn btn-danger" onClick={handleDeleteHost} disabled={saving}>
+                {saving ? 'Deleting...' : 'Delete'}
               </button>
             </div>
           </div>
