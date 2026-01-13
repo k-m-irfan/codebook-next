@@ -310,17 +310,6 @@ export default function TerminalPanel({
           viewport.style.overflow = 'hidden'
         }
 
-        // Block scroll events when in gesture mode
-        let lastScrollTop = viewport.scrollTop
-        const blockScroll = () => {
-          if (gestureModeRef.current) {
-            viewport.scrollTop = lastScrollTop
-          } else {
-            lastScrollTop = viewport.scrollTop
-          }
-        }
-        viewport.addEventListener('scroll', blockScroll, { passive: true })
-
         // Scroll mode state
         let lastY = 0
         let velocityY = 0
