@@ -76,6 +76,7 @@ export function ConnectionProvider({ host, password, children }: ConnectionProvi
       const data = event.data
       try {
         const parsed = JSON.parse(data)
+        console.log('ConnectionContext: received message type:', parsed.type, 'requestId:', parsed.requestId)
 
         // Handle password authentication request
         if (parsed.type === 'auth:password-required') {
@@ -130,7 +131,9 @@ export function ConnectionProvider({ host, password, children }: ConnectionProvi
   const sendRequest = useCallback(<T,>(message: Record<string, any>): Promise<T> => {
     return new Promise((resolve, reject) => {
       const ws = wsRef.current
+      console.log('ConnectionContext: sendRequest called, ws state:', ws?.readyState, 'type:', message.type)
       if (!ws || ws.readyState !== WebSocket.OPEN) {
+        console.error('ConnectionContext: WebSocket not ready, state:', ws?.readyState)
         reject(new Error('Not connected'))
         return
       }
@@ -138,6 +141,7 @@ export function ConnectionProvider({ host, password, children }: ConnectionProvi
       const requestId = generateRequestId()
       pendingRequests.current.set(requestId, { resolve, reject })
 
+      console.log('ConnectionContext: sending request with id:', requestId)
       ws.send(JSON.stringify({ ...message, requestId }))
 
       // Timeout after 30s

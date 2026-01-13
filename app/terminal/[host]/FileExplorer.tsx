@@ -40,18 +40,21 @@ export default function FileExplorer({
 
   // Load directory contents
   const loadDirectory = useCallback(async (path: string) => {
+    console.log('FileExplorer: loadDirectory called with path:', path || '(empty)')
     setLoading(true)
     setError(null)
     try {
       const files = await listFiles(path)
+      console.log('FileExplorer: received', files.length, 'files')
       setEntries(
         files.sort((a, b) => {
           if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1
           return a.name.localeCompare(b.name)
         })
       )
-      setCurrentPath(path)
+      setCurrentPath(path || '/') // Use '/' as display path if empty
     } catch (err: any) {
+      console.error('FileExplorer: loadDirectory error:', err.message)
       setError(err.message)
     } finally {
       setLoading(false)
@@ -95,7 +98,10 @@ export default function FileExplorer({
 
   // Open initial folder
   const openFolder = useCallback(() => {
-    const defaultPath = host === 'local' ? '/' : '/home'
+    // For local, use empty string which tells server to use homedir
+    // For remote SSH hosts, start at /home
+    const defaultPath = host === 'local' ? '' : '/home'
+    console.log('FileExplorer: openFolder called, defaultPath:', defaultPath || '(homedir)')
     loadDirectory(defaultPath)
   }, [host, loadDirectory])
 

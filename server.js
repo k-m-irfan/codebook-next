@@ -191,11 +191,17 @@ function formatFileEntry(name, stats, parentPath) {
 // Handle local file operations
 async function handleLocalFileOperation(ws, message) {
   const { type, requestId } = message
+  console.log('handleLocalFileOperation:', type, 'path:', message.path, 'requestId:', requestId)
 
   try {
     switch (type) {
       case 'file:list': {
-        const dirPath = message.path || os.homedir()
+        // Use homedir as default, or if '/' is requested on Termux (often inaccessible)
+        let dirPath = message.path || os.homedir()
+        if (dirPath === '/' && process.env.PREFIX?.includes('com.termux')) {
+          dirPath = os.homedir()
+          console.log('Redirecting / to homedir:', dirPath)
+        }
         const items = await fsPromises.readdir(dirPath, { withFileTypes: true })
         const entries = await Promise.all(
           items.map(async (item) => {
@@ -209,12 +215,14 @@ async function handleLocalFileOperation(ws, message) {
             }
           })
         )
-        ws.send(JSON.stringify({
+        const response = {
           type: 'file:list:response',
           requestId,
           success: true,
           entries: entries.filter(Boolean),
-        }))
+        }
+        console.log('Sending file:list response with', response.entries.length, 'entries')
+        ws.send(JSON.stringify(response))
         break
       }
 
@@ -316,6 +324,7 @@ async function handleLocalFileOperation(ws, message) {
         }))
     }
   } catch (err) {
+    console.error('handleLocalFileOperation error:', err.message)
     ws.send(JSON.stringify({
       type: 'file:operation:response',
       requestId,
@@ -557,10 +566,12 @@ app.prepare().then(() => {
         const msg = message.toString()
         try {
           const parsed = JSON.parse(msg)
+          console.log('Local WS received JSON message:', parsed.type)
           if (parsed.type === 'resize') {
             ptyProcess.resize(parsed.cols, parsed.rows)
           } else if (parsed.type?.startsWith('file:')) {
             // Handle file operations
+            console.log('Routing to handleLocalFileOperation')
             handleLocalFileOperation(ws, parsed)
           }
         } catch {
