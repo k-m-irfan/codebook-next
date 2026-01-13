@@ -54,13 +54,15 @@ export default function BottomNav({
           bottom: 0;
           left: 0;
           right: 0;
-          z-index: 100;
+          z-index: 1000;
           transform: translateY(0);
           transition: transform 0.15s ease-out;
+          visibility: visible;
         }
         .bottom-nav.hidden {
           transform: translateY(100%);
           pointer-events: none;
+          visibility: hidden;
         }
         .nav-btn {
           display: flex;
@@ -87,6 +89,34 @@ export default function BottomNav({
         .nav-label {
           font-size: 0.65rem;
           font-weight: 500;
+        }
+
+        @media (orientation: landscape) and (max-height: 500px) {
+          .bottom-nav {
+            flex-direction: column;
+            justify-content: center;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            right: auto;
+            width: 70px;
+            border-top: none;
+            border-right: 1px solid #2a2a4a;
+            padding: 6px;
+            padding-left: max(6px, env(safe-area-inset-left));
+            padding-bottom: 6px;
+          }
+          .bottom-nav.hidden {
+            transform: translateX(-100%);
+          }
+          .nav-btn {
+            padding: 10px 6px;
+            min-width: auto;
+            width: 100%;
+          }
+          .nav-label {
+            font-size: 0.6rem;
+          }
         }
       `}</style>
     </nav>

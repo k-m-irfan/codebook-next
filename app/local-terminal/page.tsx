@@ -65,6 +65,16 @@ export default function LocalTerminalPage() {
             overflow: hidden;
             padding-bottom: ${isKeyboardVisible ? '0' : 'var(--bottom-nav-height)'};
           }
+
+          @media (orientation: landscape) and (max-height: 500px) {
+            .local-terminal-container {
+              --left-nav-width: 70px;
+            }
+            .terminal-content {
+              padding-left: var(--left-nav-width);
+              padding-bottom: 0;
+            }
+          }
         `}</style>
       </div>
     </PasswordProvider>

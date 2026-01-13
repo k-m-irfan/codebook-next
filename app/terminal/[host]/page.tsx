@@ -318,6 +318,23 @@ export default function TerminalPage() {
             flex-shrink: 0;
           }
         }
+
+        @media (orientation: landscape) and (max-height: 500px) {
+          .session-container {
+            --left-nav-width: 70px;
+          }
+          .content-area {
+            padding-left: var(--left-nav-width);
+            padding-bottom: 0;
+          }
+          .terminal-fullscreen {
+            left: var(--left-nav-width);
+            bottom: 0;
+          }
+          .explorer-panel {
+            left: var(--left-nav-width);
+          }
+        }
       `}</style>
       </PasswordContext.Provider>
     </ConnectionProvider>
