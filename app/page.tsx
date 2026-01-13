@@ -10,7 +10,7 @@ interface SSHHost {
   port?: string
 }
 
-type Tab = 'hosts' | 'sessions' | 'settings'
+type Tab = 'hosts' | 'sessions'
 
 export default function Home() {
   const router = useRouter()
@@ -182,31 +182,6 @@ export default function Home() {
           </>
         )}
 
-        {activeTab === 'settings' && (
-          <>
-            <h1 className="title">Settings</h1>
-            <div className="panel">
-              <div className="settings-list">
-                <div className="settings-item">
-                  <span className="settings-label">Theme</span>
-                  <span className="settings-value">Dark</span>
-                </div>
-                <div className="settings-item">
-                  <span className="settings-label">Default Shell</span>
-                  <span className="settings-value">/bin/zsh</span>
-                </div>
-                <div className="settings-item">
-                  <span className="settings-label">Font Size</span>
-                  <span className="settings-value">14px</span>
-                </div>
-                <div className="settings-item">
-                  <span className="settings-label">SSH Key Path</span>
-                  <span className="settings-value">~/.ssh/id_rsa</span>
-                </div>
-              </div>
-            </div>
-          </>
-        )}
       </main>
 
       <nav className="bottom-nav">
@@ -225,19 +200,22 @@ export default function Home() {
           onClick={() => setActiveTab('sessions')}
         >
           <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M4 17l6-6-6-6M12 19h8" />
+            <rect x="3" y="3" width="7" height="9" rx="1" />
+            <rect x="14" y="3" width="7" height="5" rx="1" />
+            <rect x="14" y="12" width="7" height="9" rx="1" />
+            <rect x="3" y="16" width="7" height="5" rx="1" />
           </svg>
           <span className="nav-label">Sessions</span>
         </button>
         <button
-          className={`nav-btn ${activeTab === 'settings' ? 'active' : ''}`}
-          onClick={() => setActiveTab('settings')}
+          className="nav-btn"
+          onClick={() => router.push('/local-terminal')}
         >
           <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" />
+            <polyline points="4 17 10 11 4 5" />
+            <line x1="12" y1="19" x2="20" y2="19" />
           </svg>
-          <span className="nav-label">Settings</span>
+          <span className="nav-label">Terminal</span>
         </button>
       </nav>
 
