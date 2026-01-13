@@ -214,12 +214,15 @@ const QuickKeysPanel = forwardRef<QuickKeysPanelRef, QuickKeysPanelProps>(
           .quick-keys-panel {
             display: flex;
             align-items: center;
-            gap: 6px;
-            padding: 6px 8px;
-            padding-left: max(8px, env(safe-area-inset-left, 8px));
-            padding-right: max(8px, env(safe-area-inset-right, 8px));
-            background: #1a1a2e;
-            border-top: 1px solid #2a2a4a;
+            gap: 8px;
+            padding: 8px 12px;
+            padding-left: max(12px, env(safe-area-inset-left, 12px));
+            padding-right: max(12px, env(safe-area-inset-right, 12px));
+            background: linear-gradient(180deg, rgba(30, 30, 50, 0.95) 0%, rgba(20, 20, 35, 0.98) 100%);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-top: 1px solid rgba(100, 100, 150, 0.2);
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.3);
             overflow-x: auto;
             -webkit-overflow-scrolling: touch;
             scrollbar-width: none;
@@ -230,37 +233,46 @@ const QuickKeysPanel = forwardRef<QuickKeysPanelRef, QuickKeysPanelProps>(
           }
           .quick-key {
             flex-shrink: 0;
-            min-width: 44px;
-            height: 36px;
-            padding: 0 12px;
-            background: #252545;
-            border: 1px solid #3a3a6a;
-            border-radius: 6px;
-            color: #ccc;
-            font-size: 13px;
+            min-width: 48px;
+            height: 40px;
+            padding: 0 14px;
+            background: linear-gradient(180deg, rgba(50, 50, 80, 0.8) 0%, rgba(35, 35, 60, 0.9) 100%);
+            border: 1px solid rgba(100, 100, 150, 0.3);
+            border-radius: 10px;
+            color: rgba(220, 220, 240, 0.95);
+            font-size: 14px;
+            font-weight: 500;
             font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: all 0.15s;
+            transition: all 0.15s ease;
             user-select: none;
             -webkit-tap-highlight-color: transparent;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05);
           }
           .quick-key:active {
-            background: #3a3a5a;
-            transform: scale(0.95);
+            background: linear-gradient(180deg, rgba(70, 70, 110, 0.9) 0%, rgba(50, 50, 85, 0.95) 100%);
+            transform: scale(0.92);
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.08);
           }
           .quick-key.modifier {
-            background: #1e1e3e;
-            color: #888;
+            background: linear-gradient(180deg, rgba(35, 35, 55, 0.8) 0%, rgba(25, 25, 40, 0.9) 100%);
+            color: rgba(150, 150, 180, 0.9);
             font-size: 11px;
+            font-weight: 600;
             letter-spacing: 0.5px;
+            min-width: 52px;
           }
           .quick-key.modifier.active {
-            background: #4a4a8a;
-            border-color: #6a6aba;
+            background: linear-gradient(180deg, rgba(74, 144, 226, 0.85) 0%, rgba(50, 100, 180, 0.9) 100%);
+            border-color: rgba(100, 160, 240, 0.5);
             color: #fff;
+            box-shadow: 0 2px 8px rgba(74, 144, 226, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+          }
+          .quick-key.modifier.active:active {
+            background: linear-gradient(180deg, rgba(60, 120, 200, 0.9) 0%, rgba(40, 80, 160, 0.95) 100%);
           }
         `}</style>
       </div>

@@ -229,15 +229,25 @@ export default function EditorArea({
   if (files.length === 0) {
     return (
       <div className="welcome-screen">
-        <div className="welcome-content">
-          <h2>{host}</h2>
-          <p className="status">{connected ? 'Connected' : 'Connecting...'}</p>
-          {workspacePath ? (
-            <p className="workspace">Workspace: {workspacePath}</p>
-          ) : (
-            <p className="hint">Open the Files panel to select a workspace</p>
-          )}
+        <div className="welcome-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+            <polyline points="10 9 9 9 8 9" />
+          </svg>
         </div>
+        <h2 className="welcome-title">{host === 'local' ? 'Local' : host}</h2>
+        <div className="status-badge">
+          <span className={`status-dot ${connected ? 'connected' : ''}`} />
+          {connected ? 'Connected' : 'Connecting...'}
+        </div>
+        {workspacePath ? (
+          <p className="workspace">{workspacePath}</p>
+        ) : (
+          <p className="hint">Open the Files panel to browse and edit files</p>
+        )}
 
         <style jsx>{`
           .welcome-screen {
@@ -246,32 +256,60 @@ export default function EditorArea({
             align-items: center;
             justify-content: center;
             height: 100%;
-            background: #1a1a2e;
-            padding: 20px;
+            background: linear-gradient(180deg, #1a1a2e 0%, #0f0f23 100%);
+            padding: 24px;
           }
-          .welcome-content {
-            text-align: center;
+          .welcome-icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 80px;
+            height: 80px;
+            background: rgba(138, 180, 248, 0.1);
+            border-radius: 20px;
+            color: #8ab4f8;
+            margin-bottom: 20px;
           }
-          h2 {
+          .welcome-title {
             color: #fff;
-            margin: 0 0 8px;
+            margin: 0 0 12px;
             font-size: 1.5rem;
+            font-weight: 600;
           }
-          .status {
-            color: ${connected ? '#6f6' : '#f90'};
-            margin: 0 0 16px;
-            font-size: 0.9rem;
+          .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            color: #888;
+            font-size: 0.85rem;
+            margin-bottom: 20px;
+          }
+          .status-dot {
+            width: 8px;
+            height: 8px;
+            background: #f90;
+            border-radius: 50%;
+          }
+          .status-dot.connected {
+            background: #4ade80;
           }
           .workspace {
-            color: #7eb0d5;
+            color: #8ab4f8;
             margin: 0;
             font-size: 0.85rem;
-            font-family: monospace;
+            font-family: 'SF Mono', Monaco, monospace;
+            padding: 8px 16px;
+            background: rgba(138, 180, 248, 0.1);
+            border-radius: 8px;
           }
           .hint {
             color: #666;
             margin: 0;
             font-size: 0.9rem;
+            text-align: center;
           }
         `}</style>
       </div>
@@ -393,15 +431,19 @@ export default function EditorArea({
         .tab-bar {
           display: flex;
           align-items: center;
-          background: #16213e;
-          border-bottom: 1px solid #2a2a4a;
-          min-height: 36px;
+          background: rgba(22, 33, 62, 0.95);
+          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+          min-height: 44px;
+          padding: 0 4px;
         }
         .tabs {
           flex: 1;
           display: flex;
           overflow-x: auto;
           scrollbar-width: none;
+          -webkit-overflow-scrolling: touch;
+          gap: 4px;
+          padding: 4px 0;
         }
         .tabs::-webkit-scrollbar {
           display: none;
@@ -409,21 +451,27 @@ export default function EditorArea({
         .tab {
           display: flex;
           align-items: center;
-          gap: 6px;
-          padding: 8px 12px;
-          background: #1a1a2e;
-          border-right: 1px solid #2a2a4a;
+          gap: 8px;
+          padding: 10px 14px;
+          min-height: 36px;
+          background: rgba(255, 255, 255, 0.03);
+          border: 1px solid transparent;
+          border-radius: 10px;
           color: #888;
           cursor: pointer;
           white-space: nowrap;
           font-size: 0.85rem;
-          transition: background 0.15s;
+          transition: all 0.15s;
         }
         .tab:hover {
-          background: #222244;
+          background: rgba(255, 255, 255, 0.06);
+        }
+        .tab:active {
+          transform: scale(0.98);
         }
         .tab.active {
-          background: #1e1e1e;
+          background: rgba(138, 180, 248, 0.1);
+          border-color: rgba(138, 180, 248, 0.2);
           color: #fff;
         }
         .tab-name {
@@ -436,23 +484,32 @@ export default function EditorArea({
           height: 8px;
           background: #f90;
           border-radius: 50%;
+          animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
         }
         .close-btn {
           display: flex;
           align-items: center;
           justify-content: center;
-          width: 18px;
-          height: 18px;
+          width: 24px;
+          height: 24px;
           background: none;
           border: none;
           color: #666;
           cursor: pointer;
-          border-radius: 3px;
+          border-radius: 6px;
           padding: 0;
+          transition: all 0.15s;
         }
         .close-btn:hover {
-          background: #444;
+          background: rgba(255, 255, 255, 0.1);
           color: #fff;
+        }
+        .close-btn:active {
+          transform: scale(0.9);
         }
         .editor-container {
           flex: 1;
@@ -461,33 +518,36 @@ export default function EditorArea({
         }
         .floating-actions {
           position: absolute;
-          right: 12px;
-          bottom: 16px;
+          right: 16px;
+          bottom: 20px;
           display: flex;
-          gap: 6px;
+          gap: 8px;
           z-index: 100;
-          padding: 4px;
+          padding: 6px;
           background: rgba(22, 33, 62, 0.95);
-          border: 1px solid #3a3a6a;
-          border-radius: 10px;
-          backdrop-filter: blur(8px);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 14px;
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
           transition: all 0.2s ease;
+          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
         }
         .floating-actions:not(.expanded) {
           padding: 0;
           background: transparent;
           border-color: transparent;
+          box-shadow: none;
         }
         .action-btn {
           display: flex;
           align-items: center;
           justify-content: center;
-          width: 36px;
-          height: 36px;
-          background: rgba(30, 30, 46, 0.9);
-          border: 1px solid #3a3a6a;
+          width: 44px;
+          height: 44px;
+          background: rgba(255, 255, 255, 0.05);
+          border: 1px solid rgba(255, 255, 255, 0.1);
           color: #aaa;
-          border-radius: 8px;
+          border-radius: 12px;
           cursor: pointer;
           transition: all 0.15s ease;
         }
@@ -496,26 +556,28 @@ export default function EditorArea({
           border-color: transparent;
         }
         .action-btn:hover:not(:disabled) {
-          background: #3a3a6a;
+          background: rgba(255, 255, 255, 0.1);
           color: #fff;
         }
         .action-btn:active:not(:disabled) {
-          transform: scale(0.95);
+          transform: scale(0.92);
         }
         .action-btn:disabled {
           opacity: 0.4;
           cursor: not-allowed;
         }
         .action-btn.save.modified {
-          background: rgba(74, 124, 89, 0.9);
-          border-color: #5a8c69;
+          background: linear-gradient(135deg, rgba(74, 124, 89, 0.9) 0%, rgba(60, 110, 75, 0.9) 100%);
+          border-color: rgba(74, 124, 89, 0.5);
           color: #fff;
+          box-shadow: 0 4px 12px rgba(74, 124, 89, 0.3);
         }
         .action-btn.save.modified:hover:not(:disabled) {
-          background: #5a8c69;
+          box-shadow: 0 6px 16px rgba(74, 124, 89, 0.4);
         }
         .action-btn.toggle {
           color: #888;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
         }
         .action-btn.toggle:hover {
           color: #fff;

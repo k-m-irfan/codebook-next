@@ -751,41 +751,48 @@ export default function TerminalPanel({
           display: flex;
           align-items: center;
           justify-content: space-between;
-          background: #16213e;
-          border-bottom: 1px solid #2a2a4a;
-          min-height: 36px;
+          background: rgba(22, 33, 62, 0.95);
+          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+          min-height: 48px;
+          padding: 0 8px;
         }
         .tabs-container {
           display: flex;
           align-items: center;
           flex: 1;
           overflow-x: auto;
-          padding: 4px 4px 0;
+          -webkit-overflow-scrolling: touch;
+          gap: 4px;
+          padding: 6px 0;
+        }
+        .tabs-container::-webkit-scrollbar {
+          display: none;
         }
         .tab {
           display: flex;
           align-items: center;
-          gap: 6px;
-          padding: 6px 10px;
-          background: #1a1a2e;
-          border: 1px solid #2a2a4a;
-          border-bottom: none;
-          border-radius: 6px 6px 0 0;
-          margin-right: 2px;
+          gap: 8px;
+          padding: 10px 14px;
+          min-height: 36px;
+          background: rgba(255, 255, 255, 0.03);
+          border: 1px solid transparent;
+          border-radius: 10px;
           cursor: pointer;
           color: #888;
-          font-size: 0.8rem;
+          font-size: 0.85rem;
           white-space: nowrap;
           transition: all 0.15s;
         }
         .tab:hover {
-          background: #252545;
-          color: #aaa;
+          background: rgba(255, 255, 255, 0.06);
+        }
+        .tab:active {
+          transform: scale(0.98);
         }
         .tab.active {
-          background: #0f0f23;
+          background: rgba(138, 180, 248, 0.1);
+          border-color: rgba(138, 180, 248, 0.2);
           color: #fff;
-          border-color: #3a3a6a;
         }
         .tab-title {
           max-width: 120px;
@@ -796,51 +803,62 @@ export default function TerminalPanel({
           display: flex;
           align-items: center;
           justify-content: center;
+          width: 24px;
+          height: 24px;
           background: none;
           border: none;
           color: #666;
           cursor: pointer;
-          padding: 2px;
-          border-radius: 3px;
+          padding: 0;
+          border-radius: 6px;
+          transition: all 0.15s;
         }
         .tab-close:hover {
-          background: #3a3a5a;
+          background: rgba(255, 255, 255, 0.1);
           color: #fff;
+        }
+        .tab-close:active {
+          transform: scale(0.9);
         }
         .add-tab-btn {
           display: flex;
           align-items: center;
           justify-content: center;
-          width: 28px;
-          height: 28px;
-          background: none;
-          border: 1px solid transparent;
-          color: #666;
+          width: 36px;
+          height: 36px;
+          background: rgba(255, 255, 255, 0.03);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          color: #888;
           cursor: pointer;
-          border-radius: 4px;
+          border-radius: 10px;
           margin-left: 4px;
+          transition: all 0.15s;
         }
         .add-tab-btn:hover {
-          background: #252545;
-          border-color: #3a3a6a;
+          background: rgba(255, 255, 255, 0.08);
+          border-color: rgba(255, 255, 255, 0.15);
           color: #fff;
+        }
+        .add-tab-btn:active {
+          transform: scale(0.92);
         }
         .header-actions {
           display: flex;
           align-items: center;
           gap: 10px;
-          padding: 0 12px;
+          padding: 0 8px;
         }
         .status-dot {
-          width: 8px;
-          height: 8px;
+          width: 10px;
+          height: 10px;
           border-radius: 50%;
-          background: #f55;
-          box-shadow: 0 0 6px rgba(255, 85, 85, 0.6);
+          background: #ff6b6b;
+          box-shadow: 0 0 8px rgba(255, 107, 107, 0.5);
+          transition: all 0.3s;
         }
         .status-dot.connected {
-          background: #5f5;
-          box-shadow: 0 0 6px rgba(85, 255, 85, 0.6);
+          background: #4ade80;
+          box-shadow: 0 0 8px rgba(74, 222, 128, 0.5);
         }
         .terminal-wrapper {
           flex: 1;
@@ -856,13 +874,13 @@ export default function TerminalPanel({
         }
         .gesture-toggle {
           position: absolute;
-          bottom: 16px;
+          bottom: 20px;
           left: 16px;
-          width: 48px;
-          height: 48px;
-          border-radius: 50%;
-          background: #2a2a4a;
-          border: 2px solid #3a3a6a;
+          width: 52px;
+          height: 52px;
+          border-radius: 16px;
+          background: rgba(42, 42, 74, 0.95);
+          border: 1px solid rgba(255, 255, 255, 0.1);
           color: #888;
           cursor: pointer;
           display: flex;
@@ -870,19 +888,25 @@ export default function TerminalPanel({
           justify-content: center;
           transition: all 0.2s;
           z-index: 100;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
         }
         .gesture-toggle:hover {
-          background: #3a3a5a;
+          background: rgba(58, 58, 90, 0.95);
           color: #fff;
+        }
+        .gesture-toggle:active {
+          transform: scale(0.92);
         }
         .gesture-toggle.keyboard-visible {
-          bottom: 64px;
+          bottom: 68px;
         }
         .gesture-toggle.active {
-          background: #4a4a8a;
-          border-color: #6a6aba;
+          background: linear-gradient(135deg, rgba(74, 74, 138, 0.95) 0%, rgba(106, 106, 186, 0.95) 100%);
+          border-color: rgba(138, 138, 218, 0.5);
           color: #fff;
+          box-shadow: 0 4px 16px rgba(74, 74, 138, 0.4);
         }
         .password-modal-overlay {
           position: fixed;
@@ -890,38 +914,55 @@ export default function TerminalPanel({
           left: 0;
           right: 0;
           bottom: 0;
-          background: rgba(0, 0, 0, 0.8);
+          background: rgba(0, 0, 0, 0.7);
           display: flex;
           align-items: center;
           justify-content: center;
           z-index: 1000;
-          padding: 20px;
+          padding: 24px;
+          animation: fadeIn 0.15s ease-out;
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
         }
         .password-modal {
-          background: #16213e;
-          border-radius: 12px;
+          background: linear-gradient(180deg, #1e2a4a 0%, #16213e 100%);
+          border-radius: 20px;
           padding: 24px;
           width: 100%;
-          max-width: 350px;
+          max-width: 360px;
+          animation: scaleIn 0.2s ease-out;
+          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+        }
+        @keyframes scaleIn {
+          from { transform: scale(0.95); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
         }
         .password-modal h3 {
           color: #fff;
-          margin: 0 0 16px;
-          font-size: 1.1rem;
+          margin: 0 0 20px;
+          font-size: 1.15rem;
+          font-weight: 600;
         }
         .password-modal input {
           width: 100%;
-          padding: 12px;
-          background: #1a1a2e;
-          border: 1px solid #2a2a4a;
-          border-radius: 6px;
+          padding: 14px 16px;
+          background: rgba(0, 0, 0, 0.3);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 12px;
           color: #fff;
           font-size: 1rem;
-          margin-bottom: 16px;
+          margin-bottom: 20px;
+          transition: all 0.15s;
         }
         .password-modal input:focus {
           outline: none;
-          border-color: #4a4a8a;
+          border-color: rgba(138, 180, 248, 0.5);
+          background: rgba(0, 0, 0, 0.4);
+        }
+        .password-modal input::placeholder {
+          color: #555;
         }
         .password-modal-actions {
           display: flex;
@@ -929,28 +970,34 @@ export default function TerminalPanel({
         }
         .password-modal-actions button {
           flex: 1;
-          padding: 10px 16px;
-          border-radius: 6px;
-          font-size: 0.9rem;
+          padding: 14px 20px;
+          border-radius: 12px;
+          font-size: 0.95rem;
+          font-weight: 500;
           cursor: pointer;
-          transition: all 0.2s;
+          transition: all 0.15s;
+          min-height: 48px;
+        }
+        .password-modal-actions button:active {
+          transform: scale(0.97);
         }
         .btn-cancel {
-          background: transparent;
-          border: 1px solid #3a3a5a;
+          background: rgba(255, 255, 255, 0.05);
+          border: 1px solid rgba(255, 255, 255, 0.1);
           color: #888;
         }
         .btn-cancel:hover {
-          background: #2a2a4a;
+          background: rgba(255, 255, 255, 0.1);
           color: #fff;
         }
         .btn-submit {
-          background: #4a4a8a;
+          background: linear-gradient(135deg, #4a7cff 0%, #3a6cef 100%);
           border: none;
           color: #fff;
+          box-shadow: 0 4px 12px rgba(74, 124, 255, 0.3);
         }
         .btn-submit:hover {
-          background: #5a5a9a;
+          box-shadow: 0 6px 16px rgba(74, 124, 255, 0.4);
         }
       `}</style>
 

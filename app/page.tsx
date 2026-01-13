@@ -244,27 +244,55 @@ export default function Home() {
       <main className="content">
         {activeTab === 'hosts' && (
           <>
-            <h1 className="title">Hosts</h1>
+            <div className="page-header">
+              <div className="page-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="2" y="3" width="20" height="14" rx="2" />
+                  <path d="M8 21h8M12 17v4" />
+                </svg>
+              </div>
+              <div>
+                <h1 className="title">Hosts</h1>
+                <p className="subtitle">Connect to local or remote servers</p>
+              </div>
+            </div>
             <div className="panel">
               <div className="host-list">
                 <button className="host-btn local" onClick={() => openTerminal('local')}>
-                  Local
+                  <div className="host-btn-icon">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="2" y="3" width="20" height="14" rx="2" />
+                      <path d="M8 21h8M12 17v4" />
+                    </svg>
+                  </div>
+                  <div className="host-btn-text">
+                    <div className="host-btn-name">Local</div>
+                    <div className="host-btn-detail">This device</div>
+                  </div>
                 </button>
-                <button className="host-btn add" onClick={() => setShowAddModal(true)}>+ Add Remote</button>
                 {hosts.map((host) => (
                   <div key={host.name} className="host-item" onClick={() => openTerminal(host.name)}>
+                    <div className="host-item-icon">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="2" y="2" width="20" height="8" rx="2" />
+                        <rect x="2" y="14" width="20" height="8" rx="2" />
+                        <line x1="6" y1="6" x2="6.01" y2="6" />
+                        <line x1="6" y1="18" x2="6.01" y2="18" />
+                      </svg>
+                    </div>
                     <div className="host-info">
                       <span className="host-name">{host.name}</span>
+                      {host.hostname && <span className="host-detail">{host.user ? `${host.user}@` : ''}{host.hostname}{host.port && host.port !== '22' ? `:${host.port}` : ''}</span>}
                     </div>
                     <div className="host-actions">
                       <button className="action-btn" onClick={(e) => { e.stopPropagation(); openEditModal(host); }} title="Edit">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                           <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                         </svg>
                       </button>
                       <button className="action-btn delete" onClick={(e) => { e.stopPropagation(); openDeleteModal(host.name); }} title="Delete">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <polyline points="3 6 5 6 21 6" />
                           <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                         </svg>
@@ -272,6 +300,13 @@ export default function Home() {
                     </div>
                   </div>
                 ))}
+                <button className="host-btn add" onClick={() => setShowAddModal(true)}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                  Add Remote Host
+                </button>
               </div>
             </div>
           </>
@@ -279,9 +314,33 @@ export default function Home() {
 
         {activeTab === 'sessions' && (
           <>
-            <h1 className="title">Sessions</h1>
+            <div className="page-header">
+              <div className="page-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="7" height="9" rx="1" />
+                  <rect x="14" y="3" width="7" height="5" rx="1" />
+                  <rect x="14" y="12" width="7" height="9" rx="1" />
+                  <rect x="3" y="16" width="7" height="5" rx="1" />
+                </svg>
+              </div>
+              <div>
+                <h1 className="title">Sessions</h1>
+                <p className="subtitle">Manage active connections</p>
+              </div>
+            </div>
             <div className="panel">
-              <p className="empty-state">No active sessions</p>
+              <div className="empty-state">
+                <div className="empty-state-icon">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <rect x="3" y="3" width="7" height="9" rx="1" />
+                    <rect x="14" y="3" width="7" height="5" rx="1" />
+                    <rect x="14" y="12" width="7" height="9" rx="1" />
+                    <rect x="3" y="16" width="7" height="5" rx="1" />
+                  </svg>
+                </div>
+                <p>No active sessions</p>
+                <p style={{ fontSize: '0.85rem' }}>Connect to a host to start a session</p>
+              </div>
             </div>
           </>
         )}
@@ -358,27 +417,13 @@ export default function Home() {
       {/* Connecting Overlay */}
       {connecting && (
         <div className="modal-overlay" onClick={handleConnectingCancel}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ textAlign: 'center', position: 'relative' }}>
-            <button
-              className="modal-close"
-              onClick={handleConnectingCancel}
-              style={{
-                position: 'absolute',
-                top: '12px',
-                right: '12px',
-                background: 'none',
-                border: 'none',
-                color: '#888',
-                cursor: 'pointer',
-                padding: '4px',
-              }}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
-            <p style={{ color: '#fff', marginTop: '8px' }}>Connecting to {connectingHost}...</p>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ textAlign: 'center' }}>
+            <div className="connecting-spinner" />
+            <p style={{ color: '#fff', fontSize: '1rem', marginBottom: '4px' }}>Connecting</p>
+            <p style={{ color: '#888', fontSize: '0.9rem' }}>{connectingHost}</p>
+            <div className="modal-actions" style={{ marginTop: '20px' }}>
+              <button className="btn btn-cancel" onClick={handleConnectingCancel}>Cancel</button>
+            </div>
           </div>
         </div>
       )}
@@ -514,10 +559,21 @@ export default function Home() {
       {/* Delete Confirmation Modal */}
       {showDeleteModal && (
         <div className="modal-overlay" onClick={() => setShowDeleteModal(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <h2 className="modal-title">Delete Host</h2>
-            <p style={{ color: '#aaa', marginBottom: '20px' }}>
-              Are you sure you want to delete <strong style={{ color: '#fff' }}>{deleteHostName}</strong>? This will remove it from your SSH config.
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ textAlign: 'center' }}>
+            <div className="delete-modal-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                <line x1="10" y1="11" x2="10" y2="17" />
+                <line x1="14" y1="11" x2="14" y2="17" />
+              </svg>
+            </div>
+            <h2 className="modal-title" style={{ marginBottom: '12px' }}>Delete Host?</h2>
+            <p style={{ color: '#999', marginBottom: '8px', fontSize: '0.95rem' }}>
+              <strong style={{ color: '#fff' }}>{deleteHostName}</strong>
+            </p>
+            <p style={{ color: '#666', fontSize: '0.85rem' }}>
+              This will remove it from your SSH config.
             </p>
             <div className="modal-actions">
               <button className="btn btn-cancel" onClick={() => setShowDeleteModal(false)}>
