@@ -111,6 +111,14 @@ export default function Home() {
     setConnectingHost(null)
   }
 
+  const handleConnectingCancel = () => {
+    if (wsRef.current) {
+      wsRef.current.close()
+    }
+    setConnecting(false)
+    setConnectingHost(null)
+  }
+
   const fetchHosts = () => {
     fetch('/api/hosts')
       .then(res => res.json())
@@ -349,9 +357,28 @@ export default function Home() {
 
       {/* Connecting Overlay */}
       {connecting && (
-        <div className="modal-overlay">
-          <div className="modal" style={{ textAlign: 'center' }}>
-            <p style={{ color: '#fff' }}>Connecting to {connectingHost}...</p>
+        <div className="modal-overlay" onClick={handleConnectingCancel}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ textAlign: 'center', position: 'relative' }}>
+            <button
+              className="modal-close"
+              onClick={handleConnectingCancel}
+              style={{
+                position: 'absolute',
+                top: '12px',
+                right: '12px',
+                background: 'none',
+                border: 'none',
+                color: '#888',
+                cursor: 'pointer',
+                padding: '4px',
+              }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+            <p style={{ color: '#fff', marginTop: '8px' }}>Connecting to {connectingHost}...</p>
           </div>
         </div>
       )}
