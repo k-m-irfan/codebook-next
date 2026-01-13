@@ -1,23 +1,11 @@
 'use client'
 
-import { useState, useCallback, createContext, useContext } from 'react'
+import { useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { ConnectionProvider } from './ConnectionContext'
+import { PasswordContext } from './PasswordContext'
 import BottomNav from './BottomNav'
-
-// Password context for sharing cached password across terminal tabs
-interface PasswordContextType {
-  password: string | null
-  setPassword: (password: string) => void
-}
-
-const PasswordContext = createContext<PasswordContextType>({
-  password: null,
-  setPassword: () => {},
-})
-
-export const usePassword = () => useContext(PasswordContext)
 
 const TerminalPanel = dynamic(() => import('./TerminalPanel'), {
   ssr: false,
@@ -175,7 +163,7 @@ export default function TerminalPage() {
   const isTerminalFullscreen = showTerminal && terminalFullscreen
 
   return (
-    <ConnectionProvider host={host}>
+    <ConnectionProvider host={host} password={cachedPassword}>
       <PasswordContext.Provider value={{ password: cachedPassword, setPassword: setCachedPassword }}>
         <div className="session-container">
         {/* Content area - above bottom nav */}

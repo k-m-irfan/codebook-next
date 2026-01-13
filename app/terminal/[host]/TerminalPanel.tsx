@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { Terminal } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
 import 'xterm/css/xterm.css'
-import { usePassword } from './page'
+import { usePassword } from './PasswordContext'
 
 interface TerminalTab {
   id: string
