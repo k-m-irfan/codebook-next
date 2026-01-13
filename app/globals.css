@@ -322,3 +322,21 @@ body {
 .terminal-container {
   overscroll-behavior: none;
 }
+
+/* Gesture mode - disable viewport scrolling completely */
+.gesture-mode .xterm .xterm-viewport,
+.gesture-mode .terminal-container .xterm-viewport,
+.gesture-mode .xterm-viewport {
+  overflow: hidden !important;
+  overflow-y: hidden !important;
+  touch-action: none !important;
+  overscroll-behavior: none !important;
+}
+
+/* Scroll mode - enable viewport scrolling */
+.scroll-mode .xterm .xterm-viewport,
+.scroll-mode .terminal-container .xterm-viewport,
+.scroll-mode .xterm-viewport {
+  overflow-y: scroll !important;
+  touch-action: none !important;
+}

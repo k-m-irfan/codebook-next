@@ -44,9 +44,31 @@ export default function TerminalPanel({
   const [passwordPrompt, setPasswordPrompt] = useState('')
   const [passwordInput, setPasswordInput] = useState('')
   const [pendingTabId, setPendingTabId] = useState<string | null>(null)
+  const [gestureMode, setGestureMode] = useState(true) // Gesture mode enabled by default
   const containerRef = useRef<HTMLDivElement>(null)
   const tabCounter = useRef(0)
   const lastWorkspacePath = useRef<string>('')
+  const gestureModeRef = useRef(true) // Ref for touch handlers to access current state
+
+  // Keep ref in sync with state for touch handlers
+  // Also update viewport overflow style directly
+  useEffect(() => {
+    gestureModeRef.current = gestureMode
+
+    // Directly set overflow on all viewports to ensure scroll is blocked in gesture mode
+    if (containerRef.current) {
+      const viewports = containerRef.current.querySelectorAll('.xterm-viewport') as NodeListOf<HTMLElement>
+      viewports.forEach(viewport => {
+        if (gestureMode) {
+          viewport.style.overflowY = 'hidden'
+          viewport.style.overflow = 'hidden'
+        } else {
+          viewport.style.overflowY = 'scroll'
+          viewport.style.overflow = ''
+        }
+      })
+    }
+  }, [gestureMode])
 
   // Write buffer for batching terminal output using requestAnimationFrame
   const writeBuffers = useRef<Map<string, string[]>>(new Map())
@@ -181,96 +203,6 @@ export default function TerminalPanel({
       term.loadAddon(fitAddon)
       term.open(termDiv)
 
-      // Custom touch scroll handler with momentum based on swipe velocity
-      const viewport = termDiv.querySelector('.xterm-viewport') as HTMLElement
-      if (viewport) {
-        // Disable any default touch handling
-        viewport.style.touchAction = 'none'
-
-        let isScrolling = false
-        let lastY = 0
-        let velocityY = 0
-        let animFrameId: number | null = null
-
-        // Track position history to calculate accurate velocity
-        const history: { y: number; t: number }[] = []
-
-        const cancelMomentum = () => {
-          if (animFrameId !== null) {
-            cancelAnimationFrame(animFrameId)
-            animFrameId = null
-          }
-        }
-
-        const doMomentum = () => {
-          viewport.scrollTop += velocityY
-          velocityY *= 0.97 // Decay factor - higher = longer momentum
-
-          if (Math.abs(velocityY) > 0.3) {
-            animFrameId = requestAnimationFrame(doMomentum)
-          } else {
-            animFrameId = null
-          }
-        }
-
-        const onStart = (e: TouchEvent) => {
-          cancelMomentum()
-          isScrolling = true
-          lastY = e.touches[0].clientY
-          history.length = 0
-          history.push({ y: lastY, t: e.timeStamp })
-        }
-
-        const onMove = (e: TouchEvent) => {
-          if (!isScrolling) return
-          e.preventDefault()
-
-          const y = e.touches[0].clientY
-          const deltaY = lastY - y
-
-          // Track history for velocity (keep last 100ms)
-          history.push({ y, t: e.timeStamp })
-          const cutoff = e.timeStamp - 100
-          while (history.length > 2 && history[0].t < cutoff) {
-            history.shift()
-          }
-
-          viewport.scrollTop += deltaY
-          lastY = y
-        }
-
-        const onEnd = (e: TouchEvent) => {
-          if (!isScrolling) return
-          isScrolling = false
-
-          // Calculate velocity from position history (not just last frame)
-          if (history.length >= 2) {
-            const first = history[0]
-            const last = history[history.length - 1]
-            const dy = first.y - last.y // Scroll direction
-            const dt = last.t - first.t
-
-            if (dt > 0 && dt < 300) { // Only if gesture was fast enough
-              // Convert to pixels per frame at 60fps, with boost
-              velocityY = (dy / dt) * 16 * 2.5
-
-              // Apply momentum
-              if (Math.abs(velocityY) > 1) {
-                animFrameId = requestAnimationFrame(doMomentum)
-              }
-            }
-          }
-
-          history.length = 0
-        }
-
-        // Capture phase to intercept before xterm
-        viewport.addEventListener('touchstart', onStart, { passive: true, capture: true })
-        viewport.addEventListener('touchmove', onMove, { passive: false, capture: true })
-        viewport.addEventListener('touchend', onEnd, { passive: true, capture: true })
-        viewport.addEventListener('touchcancel', onEnd, { passive: true, capture: true })
-      }
-
       // Create WebSocket connection for this tab
       const wsUrl = `ws://${window.location.hostname}:3001?host=${encodeURIComponent(host)}`
       const ws = new WebSocket(wsUrl)
@@ -367,6 +299,196 @@ export default function TerminalPanel({
       })
       resizeObserver.observe(termDiv)
 
+      // Touch handler with gesture mode support
+      const viewport = termDiv.querySelector('.xterm-viewport') as HTMLElement
+      if (viewport) {
+        viewport.style.touchAction = 'none'
+
+        // Set initial overflow based on gesture mode
+        if (gestureModeRef.current) {
+          viewport.style.overflowY = 'hidden'
+          viewport.style.overflow = 'hidden'
+        }
+
+        // Block scroll events when in gesture mode
+        let lastScrollTop = viewport.scrollTop
+        const blockScroll = () => {
+          if (gestureModeRef.current) {
+            viewport.scrollTop = lastScrollTop
+          } else {
+            lastScrollTop = viewport.scrollTop
+          }
+        }
+        viewport.addEventListener('scroll', blockScroll, { passive: true })
+
+        // Scroll mode state
+        let lastY = 0
+        let velocityY = 0
+        let animFrameId: number | null = null
+        const history: { y: number; t: number }[] = []
+
+        // Gesture mode state
+        let startX = 0
+        let startY = 0
+        let startTime = 0
+        let lastTapTime = 0
+        let gestureTriggered = false
+
+        // Arrow key escape codes
+        const ARROW_UP = '\x1b[A'
+        const ARROW_DOWN = '\x1b[B'
+        const ARROW_RIGHT = '\x1b[C'
+        const ARROW_LEFT = '\x1b[D'
+        const TAB_KEY = '\t'
+
+        const SWIPE_THRESHOLD = 30 // Min pixels for swipe
+        const DOUBLE_TAP_DELAY = 300 // Max ms between taps
+
+        const cancelMomentum = () => {
+          if (animFrameId !== null) {
+            cancelAnimationFrame(animFrameId)
+            animFrameId = null
+          }
+        }
+
+        const doMomentum = () => {
+          viewport.scrollTop += velocityY
+          velocityY *= 0.97
+
+          if (Math.abs(velocityY) > 0.3) {
+            animFrameId = requestAnimationFrame(doMomentum)
+          } else {
+            animFrameId = null
+          }
+        }
+
+        const sendKey = (key: string) => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(key)
+          }
+        }
+
+        const onTouchStart = (e: TouchEvent) => {
+          const touch = e.touches[0]
+          startX = touch.clientX
+          startY = touch.clientY
+          startTime = e.timeStamp
+          gestureTriggered = false
+
+          if (gestureModeRef.current) {
+            // Gesture mode - check for double tap
+            const timeSinceLastTap = startTime - lastTapTime
+            if (timeSinceLastTap < DOUBLE_TAP_DELAY) {
+              // Double tap detected - send tab
+              sendKey(TAB_KEY)
+              lastTapTime = 0 // Reset to prevent triple tap
+              gestureTriggered = true
+              // Refocus terminal to keep keyboard open
+              term.focus()
+              return
+            }
+          } else {
+            // Scroll mode
+            cancelMomentum()
+            lastY = startY
+            history.length = 0
+            history.push({ y: startY, t: e.timeStamp })
+          }
+        }
+
+        const onTouchMove = (e: TouchEvent) => {
+          // Only prevent default to stop scrolling, don't stop propagation
+          e.preventDefault()
+
+          if (gestureModeRef.current) {
+            // Gesture mode - don't scroll, handled on end
+            return
+          }
+
+          // Scroll mode
+          const touch = e.touches[0]
+          const y = touch.clientY
+          const deltaY = lastY - y
+
+          history.push({ y, t: e.timeStamp })
+          const cutoff = e.timeStamp - 100
+          while (history.length > 2 && history[0].t < cutoff) {
+            history.shift()
+          }
+
+          viewport.scrollTop += deltaY
+          lastY = y
+        }
+
+        const onTouchEnd = (e: TouchEvent) => {
+          if (gestureTriggered) {
+            // Refocus terminal after gesture
+            term.focus()
+            return
+          }
+
+          const endTime = e.timeStamp
+          const touch = e.changedTouches[0]
+          const endX = touch.clientX
+          const endY = touch.clientY
+
+          const deltaX = endX - startX
+          const deltaY = endY - startY
+
+          if (gestureModeRef.current) {
+            // Gesture mode - detect swipe direction
+            const absX = Math.abs(deltaX)
+            const absY = Math.abs(deltaY)
+
+            if (absX > SWIPE_THRESHOLD || absY > SWIPE_THRESHOLD) {
+              if (absX > absY) {
+                // Horizontal swipe
+                if (deltaX > 0) {
+                  sendKey(ARROW_RIGHT)
+                } else {
+                  sendKey(ARROW_LEFT)
+                }
+              } else {
+                // Vertical swipe
+                if (deltaY > 0) {
+                  sendKey(ARROW_DOWN)
+                } else {
+                  sendKey(ARROW_UP)
+                }
+              }
+              lastTapTime = 0 // Reset tap detection after swipe
+            } else {
+              // No swipe - record tap time for double tap detection
+              lastTapTime = endTime
+            }
+            // Always refocus terminal after gesture to keep keyboard and cursor
+            term.focus()
+          } else {
+            // Scroll mode - apply momentum
+            if (history.length >= 2) {
+              const first = history[0]
+              const last = history[history.length - 1]
+              const dy = first.y - last.y
+              const dt = last.t - first.t
+
+              if (dt > 0 && dt < 300) {
+                velocityY = (dy / dt) * 16 * 2.5
+                if (Math.abs(velocityY) > 1) {
+                  animFrameId = requestAnimationFrame(doMomentum)
+                }
+              }
+            }
+            history.length = 0
+          }
+        }
+
+        // Don't use capture for touchstart to allow normal focus behavior
+        viewport.addEventListener('touchstart', onTouchStart, { passive: true })
+        viewport.addEventListener('touchmove', onTouchMove, { passive: false, capture: true })
+        viewport.addEventListener('touchend', onTouchEnd, { passive: true })
+        viewport.addEventListener('touchcancel', onTouchEnd, { passive: true })
+      }
+
       // Update tab with terminal instances
       setTabs(prev => prev.map(t =>
         t.id === tabId ? { ...t, ws, term, fitAddon, containerEl: termDiv } : t
@@ -442,7 +564,7 @@ export default function TerminalPanel({
   }, [pendingTabId, tabs])
 
   return (
-    <div className="terminal-panel">
+    <div className={`terminal-panel ${gestureMode ? 'gesture-mode' : 'scroll-mode'}`}>
       <div className="panel-header">
         <div className="tabs-container">
           {tabs.map(tab => (
@@ -473,7 +595,16 @@ export default function TerminalPanel({
           </span>
         </div>
       </div>
-      <div ref={containerRef} className="terminal-container" />
+      <div className="terminal-wrapper">
+        <div ref={containerRef} className="terminal-container" />
+        <button
+          className={`gesture-toggle ${gestureMode ? 'active' : ''}`}
+          onClick={() => setGestureMode(!gestureMode)}
+          title={gestureMode ? 'Gesture Mode (tap to switch to scroll)' : 'Scroll Mode (tap to switch to gesture)'}
+        >
+          {gestureMode ? <GestureIcon /> : <ScrollIcon />}
+        </button>
+      </div>
 
       <style jsx>{`
         .terminal-panel {
@@ -481,6 +612,7 @@ export default function TerminalPanel({
           flex-direction: column;
           height: 100%;
           background: #0f0f23;
+          position: relative;
         }
         .panel-header {
           display: flex;
@@ -577,10 +709,44 @@ export default function TerminalPanel({
           color: #6f6;
           background: rgba(102, 255, 102, 0.1);
         }
+        .terminal-wrapper {
+          flex: 1;
+          position: relative;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
         .terminal-container {
           flex: 1;
           padding: 4px;
           overflow: hidden;
+        }
+        .gesture-toggle {
+          position: absolute;
+          bottom: 16px;
+          right: 16px;
+          width: 48px;
+          height: 48px;
+          border-radius: 50%;
+          background: #2a2a4a;
+          border: 2px solid #3a3a6a;
+          color: #888;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.2s;
+          z-index: 100;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+        .gesture-toggle:hover {
+          background: #3a3a5a;
+          color: #fff;
+        }
+        .gesture-toggle.active {
+          background: #4a4a8a;
+          border-color: #6a6aba;
+          color: #fff;
         }
         .password-modal-overlay {
           position: fixed;
@@ -697,6 +863,31 @@ function PlusIcon() {
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <line x1="12" y1="5" x2="12" y2="19" />
       <line x1="5" y1="12" x2="19" y2="12" />
+    </svg>
+  )
+}
+
+function GestureIcon() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      {/* Hand with swipe arrows */}
+      <path d="M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v0" />
+      <path d="M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v6" />
+      <path d="M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8" />
+      <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" />
+    </svg>
+  )
+}
+
+function ScrollIcon() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      {/* Scroll/list icon */}
+      <path d="M3 6h18" />
+      <path d="M3 12h18" />
+      <path d="M3 18h18" />
+      <path d="M19 9l3-3-3-3" />
+      <path d="M19 21l3-3-3-3" />
     </svg>
   )
 }
