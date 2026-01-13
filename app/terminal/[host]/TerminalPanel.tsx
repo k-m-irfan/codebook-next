@@ -49,6 +49,7 @@ export default function TerminalPanel({
   const tabCounter = useRef(0)
   const lastWorkspacePath = useRef<string>('')
   const gestureModeRef = useRef(true) // Ref for touch handlers to access current state
+  const tabCompletionPendingRef = useRef<Set<string>>(new Set()) // Track TAB completion state per terminal
 
   // Keep ref in sync with state for touch handlers
   // Also update viewport overflow style directly
@@ -293,6 +294,26 @@ export default function TerminalPanel({
 
       term.onData((data) => {
         if (ws.readyState === WebSocket.OPEN) {
+          // Clear completion pending state on Enter or Escape (user committed or cancelled)
+          if (data === '\r' || data === '\x1b') {
+            tabCompletionPendingRef.current.delete(tabId)
+            ws.send(data)
+            return
+          }
+          // If TAB completion list is showing and user types anything (except TAB),
+          // send the character first, then clear screen to remove completion list
+          if (tabCompletionPendingRef.current.has(tabId) && data.length > 0 && data !== '\t') {
+            tabCompletionPendingRef.current.delete(tabId)
+            // Send character first so shell registers it
+            ws.send(data)
+            // Then clear screen after a delay to remove completion list
+            setTimeout(() => {
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send('\x0c') // Ctrl+L to clear and redraw with updated command
+              }
+            }, 100)
+            return
+          }
           ws.send(data)
         }
       })
@@ -404,6 +425,8 @@ export default function TerminalPanel({
             if (timeSinceLastTap < DOUBLE_TAP_DELAY) {
               // Double tap detected - send tab
               sendKey(TAB_KEY)
+              // Mark that TAB completion list might be showing
+              tabCompletionPendingRef.current.add(tabId)
               lastTapTime = 0 // Reset to prevent triple tap
               gestureTriggered = true
               // Refocus terminal to keep keyboard open
