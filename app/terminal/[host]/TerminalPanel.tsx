@@ -58,13 +58,28 @@ export default function TerminalPanel({
     // Directly set overflow on all viewports to ensure scroll is blocked in gesture mode
     if (containerRef.current) {
       const viewports = containerRef.current.querySelectorAll('.xterm-viewport') as NodeListOf<HTMLElement>
+      const screens = containerRef.current.querySelectorAll('.xterm-screen') as NodeListOf<HTMLElement>
+
       viewports.forEach(viewport => {
         if (gestureMode) {
           viewport.style.overflowY = 'hidden'
           viewport.style.overflow = 'hidden'
+          viewport.style.touchAction = 'none'
+          viewport.style.overscrollBehavior = 'none'
         } else {
           viewport.style.overflowY = 'scroll'
           viewport.style.overflow = ''
+          viewport.style.touchAction = ''
+          viewport.style.overscrollBehavior = ''
+        }
+      })
+
+      // Also disable touch on xterm-screen to prevent its internal handling
+      screens.forEach(screen => {
+        if (gestureMode) {
+          screen.style.touchAction = 'none'
+        } else {
+          screen.style.touchAction = ''
         }
       })
     }
@@ -308,6 +323,8 @@ export default function TerminalPanel({
         if (gestureModeRef.current) {
           viewport.style.overflowY = 'hidden'
           viewport.style.overflow = 'hidden'
+          viewport.style.touchAction = 'none'
+          viewport.style.overscrollBehavior = 'none'
         }
 
         // Scroll mode state
@@ -326,6 +343,7 @@ export default function TerminalPanel({
         let lastGestureY = 0
         let cumulativeX = 0
         let cumulativeY = 0
+        let swipeAxis: 'horizontal' | 'vertical' | null = null // Lock to one axis
 
         // Arrow key escape codes
         const ARROW_UP = '\x1b[A'
@@ -370,11 +388,16 @@ export default function TerminalPanel({
           gestureTriggered = false
 
           if (gestureModeRef.current) {
+            // Prevent default and stop propagation to fully block xterm's touch handling
+            e.preventDefault()
+            e.stopPropagation()
+
             // Gesture mode - reset tracking for continuous gesture
             lastGestureX = touch.clientX
             lastGestureY = touch.clientY
             cumulativeX = 0
             cumulativeY = 0
+            swipeAxis = null // Reset axis lock for new gesture
 
             // Check for double tap
             const timeSinceLastTap = startTime - lastTapTime
@@ -397,10 +420,11 @@ export default function TerminalPanel({
         }
 
         const onTouchMove = (e: TouchEvent) => {
-          // Only prevent default to stop scrolling, don't stop propagation
-          e.preventDefault()
-
           if (gestureModeRef.current) {
+            // Gesture mode - prevent and stop to block xterm's handling
+            e.preventDefault()
+            e.stopPropagation()
+
             // Gesture mode - send keys continuously based on movement
             const touch = e.touches[0]
             const deltaX = touch.clientX - lastGestureX
@@ -412,34 +436,45 @@ export default function TerminalPanel({
             cumulativeX += deltaX
             cumulativeY += deltaY
 
-            // Send horizontal keys
-            while (Math.abs(cumulativeX) >= GESTURE_STEP) {
-              if (cumulativeX > 0) {
-                sendKey(ARROW_RIGHT)
-                cumulativeX -= GESTURE_STEP
-              } else {
-                sendKey(ARROW_LEFT)
-                cumulativeX += GESTURE_STEP
+            // Determine axis lock on first significant movement
+            if (swipeAxis === null) {
+              const absX = Math.abs(cumulativeX)
+              const absY = Math.abs(cumulativeY)
+              if (absX >= GESTURE_STEP || absY >= GESTURE_STEP) {
+                swipeAxis = absX > absY ? 'horizontal' : 'vertical'
               }
-              gestureTriggered = true
             }
 
-            // Send vertical keys
-            while (Math.abs(cumulativeY) >= GESTURE_STEP) {
-              if (cumulativeY > 0) {
-                sendKey(ARROW_DOWN)
-                cumulativeY -= GESTURE_STEP
-              } else {
-                sendKey(ARROW_UP)
-                cumulativeY += GESTURE_STEP
+            // Send keys only for the locked axis
+            if (swipeAxis === 'horizontal') {
+              while (Math.abs(cumulativeX) >= GESTURE_STEP) {
+                if (cumulativeX > 0) {
+                  sendKey(ARROW_RIGHT)
+                  cumulativeX -= GESTURE_STEP
+                } else {
+                  sendKey(ARROW_LEFT)
+                  cumulativeX += GESTURE_STEP
+                }
+                gestureTriggered = true
               }
-              gestureTriggered = true
+            } else if (swipeAxis === 'vertical') {
+              while (Math.abs(cumulativeY) >= GESTURE_STEP) {
+                if (cumulativeY > 0) {
+                  sendKey(ARROW_DOWN)
+                  cumulativeY -= GESTURE_STEP
+                } else {
+                  sendKey(ARROW_UP)
+                  cumulativeY += GESTURE_STEP
+                }
+                gestureTriggered = true
+              }
             }
 
             return
           }
 
-          // Scroll mode
+          // Scroll mode - prevent default for custom momentum scrolling
+          e.preventDefault()
           const touch = e.touches[0]
           const y = touch.clientY
           const deltaY = lastY - y
@@ -499,8 +534,8 @@ export default function TerminalPanel({
           }
         }
 
-        // Don't use capture for touchstart to allow normal focus behavior
-        viewport.addEventListener('touchstart', onTouchStart, { passive: true })
+        // Use passive: false to allow preventDefault in gesture mode
+        viewport.addEventListener('touchstart', onTouchStart, { passive: false })
         viewport.addEventListener('touchmove', onTouchMove, { passive: false, capture: true })
         viewport.addEventListener('touchend', onTouchEnd, { passive: true })
         viewport.addEventListener('touchcancel', onTouchEnd, { passive: true })
