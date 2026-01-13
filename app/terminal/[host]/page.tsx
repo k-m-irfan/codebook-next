@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic'
 import { ConnectionProvider } from './ConnectionContext'
 import { PasswordContext } from './PasswordContext'
 import BottomNav from './BottomNav'
+import { useKeyboardHeight } from './useKeyboardHeight'
 
 const TerminalPanel = dynamic(() => import('./TerminalPanel'), {
   ssr: false,
@@ -162,6 +163,9 @@ export default function TerminalPage() {
   const isExplorerFullscreen = showExplorer && explorerFullscreen
   const isTerminalFullscreen = showTerminal && terminalFullscreen
 
+  // Keyboard height detection
+  const { keyboardHeight, viewportHeight, isKeyboardVisible } = useKeyboardHeight()
+
   return (
     <ConnectionProvider host={host} password={cachedPassword}>
       <PasswordContext.Provider value={{ password: cachedPassword, setPassword: setCachedPassword }}>
@@ -199,6 +203,7 @@ export default function TerminalPage() {
                 onSelectFile={setActiveFileIndex}
                 host={host}
                 workspacePath={workspacePath}
+                keyboardVisible={isKeyboardVisible}
               />
             </div>
           )}
@@ -206,20 +211,20 @@ export default function TerminalPage() {
           {/* Terminal Panel - Bottom panel (non-fullscreen) - removed duplicate, using fullscreen only */}
         </div>
 
-        {/* Bottom nav - always visible */}
+        {/* Bottom nav - hidden when keyboard is visible */}
         <BottomNav
           showExplorer={showExplorer}
           showTerminal={showTerminal}
           onToggleExplorer={toggleExplorer}
           onToggleTerminal={toggleTerminal}
+          hidden={isKeyboardVisible}
         />
       </div>
 
       <style jsx>{`
         .session-container {
           --bottom-nav-height: calc(56px + env(safe-area-inset-bottom, 0px));
-          height: 100vh;
-          height: 100dvh;
+          height: ${isKeyboardVisible ? `${viewportHeight}px` : '100dvh'};
           background: #1a1a2e;
           display: flex;
           flex-direction: column;
@@ -232,7 +237,7 @@ export default function TerminalPage() {
           overflow: hidden;
           position: relative;
           min-height: 0;
-          padding-bottom: var(--bottom-nav-height);
+          padding-bottom: ${isKeyboardVisible ? '0' : 'var(--bottom-nav-height)'};
         }
         .explorer-panel {
           position: absolute;

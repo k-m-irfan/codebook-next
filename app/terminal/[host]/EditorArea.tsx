@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState, useRef } from 'react'
+import { useCallback, useState, useRef, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import { useConnection } from './ConnectionContext'
 import type { OpenFile } from './page'
@@ -34,6 +34,7 @@ interface EditorAreaProps {
   onSelectFile: (index: number) => void
   host: string
   workspacePath: string
+  keyboardVisible?: boolean
 }
 
 export default function EditorArea({
@@ -45,6 +46,7 @@ export default function EditorArea({
   onSelectFile,
   host,
   workspacePath,
+  keyboardVisible = false,
 }: EditorAreaProps) {
   const { writeFile, connected } = useConnection()
   const [saving, setSaving] = useState(false)
@@ -52,6 +54,30 @@ export default function EditorArea({
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
 
   const activeFile = activeIndex >= 0 && activeIndex < files.length ? files[activeIndex] : null
+
+  // Force Monaco editor to re-layout when keyboard visibility changes
+  // and scroll cursor into view
+  useEffect(() => {
+    if (editorRef.current) {
+      // Small delay to allow DOM to update first
+      const timer = setTimeout(() => {
+        if (editorRef.current) {
+          // Re-layout the editor
+          editorRef.current.layout()
+
+          // If keyboard just became visible, scroll cursor into view
+          if (keyboardVisible) {
+            const position = editorRef.current.getPosition()
+            if (position) {
+              // Reveal the cursor position, scrolling if needed
+              editorRef.current.revealPositionInCenter(position)
+            }
+          }
+        }
+      }, 100)
+      return () => clearTimeout(timer)
+    }
+  }, [keyboardVisible])
 
   const handleSave = useCallback(async () => {
     if (!activeFile) return

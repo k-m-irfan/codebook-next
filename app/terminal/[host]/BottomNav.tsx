@@ -7,6 +7,7 @@ interface BottomNavProps {
   showTerminal: boolean
   onToggleExplorer: () => void
   onToggleTerminal: () => void
+  hidden?: boolean
 }
 
 export default function BottomNav({
@@ -14,11 +15,12 @@ export default function BottomNav({
   showTerminal,
   onToggleExplorer,
   onToggleTerminal,
+  hidden = false,
 }: BottomNavProps) {
   const router = useRouter()
 
   return (
-    <nav className="bottom-nav">
+    <nav className={`bottom-nav ${hidden ? 'hidden' : ''}`}>
       <button
         className={`nav-btn ${showExplorer ? 'active' : ''}`}
         onClick={onToggleExplorer}
@@ -53,6 +55,12 @@ export default function BottomNav({
           left: 0;
           right: 0;
           z-index: 100;
+          transform: translateY(0);
+          transition: transform 0.15s ease-out;
+        }
+        .bottom-nav.hidden {
+          transform: translateY(100%);
+          pointer-events: none;
         }
         .nav-btn {
           display: flex;
