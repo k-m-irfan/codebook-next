@@ -618,9 +618,7 @@ export default function TerminalPanel({
           </button>
         </div>
         <div className="header-actions">
-          <span className={`status ${activeTab?.connected ? 'connected' : ''}`}>
-            {activeTab?.connected ? 'Connected' : 'Disconnected'}
-          </span>
+          <span className={`status-dot ${activeTab?.connected ? 'connected' : ''}`} />
         </div>
       </div>
       <div className="terminal-wrapper">
@@ -723,19 +721,19 @@ export default function TerminalPanel({
         .header-actions {
           display: flex;
           align-items: center;
-          gap: 8px;
-          padding: 0 10px;
+          gap: 10px;
+          padding: 0 12px;
         }
-        .status {
-          font-size: 0.7rem;
-          color: #f66;
-          padding: 2px 8px;
-          background: rgba(255, 102, 102, 0.1);
-          border-radius: 3px;
+        .status-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: #f55;
+          box-shadow: 0 0 6px rgba(255, 85, 85, 0.6);
         }
-        .status.connected {
-          color: #6f6;
-          background: rgba(102, 255, 102, 0.1);
+        .status-dot.connected {
+          background: #5f5;
+          box-shadow: 0 0 6px rgba(85, 255, 85, 0.6);
         }
         .terminal-wrapper {
           flex: 1;
@@ -752,7 +750,7 @@ export default function TerminalPanel({
         .gesture-toggle {
           position: absolute;
           bottom: 16px;
-          right: 16px;
+          left: 16px;
           width: 48px;
           height: 48px;
           border-radius: 50%;
@@ -895,9 +893,9 @@ function PlusIcon() {
   )
 }
 
-function GestureIcon() {
+function GestureIcon({ size = 24 }: { size?: number }) {
   return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       {/* Hand with swipe arrows */}
       <path d="M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v0" />
       <path d="M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v6" />
@@ -907,9 +905,9 @@ function GestureIcon() {
   )
 }
 
-function ScrollIcon() {
+function ScrollIcon({ size = 24 }: { size?: number }) {
   return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       {/* Scroll/list icon */}
       <path d="M3 6h18" />
       <path d="M3 12h18" />
