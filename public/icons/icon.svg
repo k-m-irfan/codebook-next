@@ -1,15 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <rect width="512" height="512" rx="96" fill="#0f0f23"/>
 
-  <!-- < symbol (C for Code) -->
-  <polyline points="180,140 60,256 180,372"
-            fill="none" stroke="#4ade80" stroke-width="44" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- < symbol (C for Code) - scaled 20% smaller -->
+  <polyline points="195,163 99,256 195,349"
+            fill="none" stroke="#4ade80" stroke-width="35" stroke-linecap="round" stroke-linejoin="round"/>
 
   <!-- \ symbol (middle slash) -->
-  <line x1="210" y1="110" x2="302" y2="402"
-        stroke="#64748b" stroke-width="40" stroke-linecap="round"/>
+  <line x1="219" y1="139" x2="293" y2="373"
+        stroke="#64748b" stroke-width="32" stroke-linecap="round"/>
 
   <!-- > symbol (B for Book) -->
-  <polyline points="332,140 452,256 332,372"
-            fill="none" stroke="#4ade80" stroke-width="44" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="317,163 413,256 317,349"
+            fill="none" stroke="#4ade80" stroke-width="35" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

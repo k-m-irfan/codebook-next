@@ -120,30 +120,39 @@ body {
 
 /* Bottom Navigation */
 .bottom-nav {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
   display: flex;
   justify-content: space-around;
   background: #0f0f23;
   border-top: 1px solid #2a2a4a;
-  padding: 10px 0;
-  padding-bottom: max(10px, env(safe-area-inset-bottom));
+  padding: 6px 0;
+  padding-bottom: max(6px, env(safe-area-inset-bottom));
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  transform: translateY(0);
+  transition: transform 0.15s ease-out;
+}
+
+.bottom-nav.hidden {
+  transform: translateY(100%);
+  pointer-events: none;
 }
 
 .nav-btn {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   background: none;
   border: none;
   color: #666;
   cursor: pointer;
-  padding: 8px 20px;
+  padding: 6px 20px;
   border-radius: 8px;
   transition: all 0.2s;
+  min-width: 70px;
 }
 
 .nav-btn:hover {
@@ -153,20 +162,16 @@ body {
 
 .nav-btn.active {
   color: #fff;
-}
-
-.nav-btn.active .nav-icon {
-  transform: scale(1.1);
+  background: #2a2a4a;
 }
 
 .nav-icon {
   width: 22px;
   height: 22px;
-  transition: transform 0.2s;
 }
 
 .nav-label {
-  font-size: 0.75rem;
+  font-size: 0.65rem;
   font-weight: 500;
 }
 
