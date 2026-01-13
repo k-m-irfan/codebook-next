@@ -29,17 +29,17 @@ export default function BottomNav({
         <span className="nav-label">Files</span>
       </button>
 
+      <button className="nav-btn" onClick={() => router.push('/')}>
+        <HomeIcon />
+        <span className="nav-label">Home</span>
+      </button>
+
       <button
         className={`nav-btn ${showTerminal ? 'active' : ''}`}
         onClick={onToggleTerminal}
       >
         <TerminalIcon />
         <span className="nav-label">Terminal</span>
-      </button>
-
-      <button className="nav-btn" onClick={() => router.push('/')}>
-        <HomeIcon />
-        <span className="nav-label">Home</span>
       </button>
     </nav>
   )

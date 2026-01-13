@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef, useEffect, useImperativeHandle, forwardRef } from 'react'
+import { useState, useCallback, useRef, useEffect, useImperativeHandle, forwardRef, useMemo } from 'react'
 
 interface Modifiers {
   ctrl: boolean
@@ -24,8 +24,8 @@ interface QuickKey {
 }
 
 const QUICK_KEYS: QuickKey[] = [
-  { label: 'ctrl', type: 'modifier', value: 'ctrl' },
-  { label: 'tab', type: 'special', value: '\t' },      // Tab for completion
+  { label: 'CTRL', type: 'modifier', value: 'ctrl' },
+  { label: 'TAB', type: 'special', value: '\t' },      // Tab for completion
   { label: '~', type: 'char', value: '~' },
   { label: '-', type: 'char', value: '-' },
   { label: '(', type: 'char', value: '(' },
@@ -37,16 +37,38 @@ const QUICK_KEYS: QuickKey[] = [
   { label: ':', type: 'char', value: ':' },
   { label: ';', type: 'char', value: ';' },
   // Readline shortcuts for terminal line editing
-  { label: 'home', type: 'special', value: '\x01' },  // Ctrl+A - beginning of line
-  { label: 'end', type: 'special', value: '\x05' },   // Ctrl+E - end of line
-  { label: 'pgup', type: 'special', value: '\x1b[5~' }, // Page up (works in less/vim)
-  { label: 'pgdn', type: 'special', value: '\x1b[6~' }, // Page down (works in less/vim)
-  { label: 'shift', type: 'modifier', value: 'shift' },
-  { label: 'alt', type: 'modifier', value: 'alt' },
-  { label: 'esc', type: 'special', value: '\x1b' },
+  { label: 'HOME', type: 'special', value: '\x01' },  // Ctrl+A - beginning of line
+  { label: 'END', type: 'special', value: '\x05' },   // Ctrl+E - end of line
+  { label: 'PGUP', type: 'special', value: '\x1b[5~' }, // Page up (works in less/vim)
+  { label: 'PGDN', type: 'special', value: '\x1b[6~' }, // Page down (works in less/vim)
+  { label: 'SHIFT', type: 'modifier', value: 'shift' },
+  { label: 'ALT', type: 'modifier', value: 'alt' },
+  { label: 'ESC', type: 'special', value: '\x1b' },
 ]
 
 const TAP_THRESHOLD = 10 // Max movement in pixels to consider it a tap
+const STORAGE_KEY = 'quickkeys-usage'
+
+// Load usage data from localStorage
+function loadUsageData(): Record<string, number> {
+  if (typeof window === 'undefined') return {}
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY)
+    return stored ? JSON.parse(stored) : {}
+  } catch {
+    return {}
+  }
+}
+
+// Save usage data to localStorage
+function saveUsageData(usage: Record<string, number>) {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(usage))
+  } catch {
+    // Ignore storage errors
+  }
+}
 
 const QuickKeysPanel = forwardRef<QuickKeysPanelRef, QuickKeysPanelProps>(
   function QuickKeysPanel({ onKeyPress, onModifierChange }, ref) {
@@ -55,6 +77,23 @@ const QuickKeysPanel = forwardRef<QuickKeysPanelRef, QuickKeysPanelProps>(
       alt: false,
       shift: false,
     })
+
+    // Track key usage for sorting
+    const [keyUsage, setKeyUsage] = useState<Record<string, number>>({})
+
+    // Load usage data on mount
+    useEffect(() => {
+      setKeyUsage(loadUsageData())
+    }, [])
+
+    // Sort keys by usage frequency (most used first)
+    const sortedKeys = useMemo(() => {
+      return [...QUICK_KEYS].sort((a, b) => {
+        const usageA = keyUsage[a.label] || 0
+        const usageB = keyUsage[b.label] || 0
+        return usageB - usageA
+      })
+    }, [keyUsage])
 
     // Track touch start position for tap vs swipe detection
     const touchStartRef = useRef<{ x: number; y: number } | null>(null)
@@ -71,7 +110,19 @@ const QuickKeysPanel = forwardRef<QuickKeysPanelRef, QuickKeysPanelProps>(
       onModifierChange?.(modifiers)
     }, [modifiers, onModifierChange])
 
+    // Update usage count for a key
+    const incrementUsage = useCallback((label: string) => {
+      setKeyUsage(prev => {
+        const updated = { ...prev, [label]: (prev[label] || 0) + 1 }
+        saveUsageData(updated)
+        return updated
+      })
+    }, [])
+
     const handleKeyPress = useCallback((key: QuickKey) => {
+      // Track usage
+      incrementUsage(key.label)
+
       if (key.type === 'modifier') {
         // Toggle modifier state
         setModifiers(prev => ({
@@ -108,7 +159,7 @@ const QuickKeysPanel = forwardRef<QuickKeysPanelRef, QuickKeysPanelProps>(
       if (modifiers.ctrl || modifiers.alt || modifiers.shift) {
         setModifiers({ ctrl: false, alt: false, shift: false })
       }
-    }, [modifiers, onKeyPress])
+    }, [modifiers, onKeyPress, incrementUsage])
 
     const handleTouchStart = useCallback((e: React.TouchEvent, _key: QuickKey) => {
       e.stopPropagation()
@@ -140,9 +191,9 @@ const QuickKeysPanel = forwardRef<QuickKeysPanelRef, QuickKeysPanelProps>(
         className="quick-keys-panel"
         onMouseDown={(e) => e.preventDefault()}
       >
-        {QUICK_KEYS.map((key, index) => (
+        {sortedKeys.map((key) => (
           <button
-            key={index}
+            key={key.label}
             className={`quick-key ${key.type === 'modifier' ? 'modifier' : ''} ${
               key.type === 'modifier' && modifiers[key.value as keyof Modifiers] ? 'active' : ''
             }`}
@@ -204,7 +255,6 @@ const QuickKeysPanel = forwardRef<QuickKeysPanelRef, QuickKeysPanelProps>(
             background: #1e1e3e;
             color: #888;
             font-size: 11px;
-            text-transform: uppercase;
             letter-spacing: 0.5px;
           }
           .quick-key.modifier.active {
