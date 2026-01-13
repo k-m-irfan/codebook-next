@@ -2,12 +2,101 @@ const { createServer } = require('http')
 const { parse } = require('url')
 const next = require('next')
 const { WebSocketServer } = require('ws')
-const pty = require('@homebridge/node-pty-prebuilt-multiarch')
 const { Client } = require('ssh2')
 const os = require('os')
 const fs = require('fs')
 const fsPromises = require('fs').promises
 const path = require('path')
+const { spawn } = require('child_process')
+
+// Try to load node-pty, fall back to child_process wrapper
+let pty = null
+try {
+  pty = require('node-pty')
+  console.log('Using node-pty for terminal')
+} catch (e) {
+  console.log('node-pty not available, using child_process fallback')
+}
+
+// Fallback PTY implementation using 'script' command for proper PTY on Linux/Termux
+class FallbackPty {
+  constructor(shell, args, options) {
+    this.shell = shell
+    this.options = options
+    this.dataCallbacks = []
+    this.exitCallbacks = []
+    this.cols = options.cols || 80
+    this.rows = options.rows || 24
+
+    // Use 'script' command to create a PTY wrapper (works on Linux/Termux)
+    // script -q /dev/null runs without logging to file
+    const scriptArgs = ['-q', '/dev/null', shell, ...args]
+
+    this.process = spawn('script', scriptArgs, {
+      cwd: options.cwd || os.homedir(),
+      env: {
+        ...process.env,
+        ...options.env,
+        TERM: 'xterm-256color',
+        COLUMNS: String(this.cols),
+        LINES: String(this.rows)
+      },
+      stdio: ['pipe', 'pipe', 'pipe']
+    })
+
+    // Handle stdout (this is the PTY output)
+    this.process.stdout.on('data', (data) => {
+      this.dataCallbacks.forEach(cb => cb(data.toString()))
+    })
+
+    // Handle stderr
+    this.process.stderr.on('data', (data) => {
+      this.dataCallbacks.forEach(cb => cb(data.toString()))
+    })
+
+    // Handle exit
+    this.process.on('exit', (code) => {
+      this.exitCallbacks.forEach(cb => cb(code))
+    })
+
+    this.process.on('error', (err) => {
+      this.dataCallbacks.forEach(cb => cb(`\r\nError: ${err.message}\r\n`))
+    })
+  }
+
+  onData(callback) {
+    this.dataCallbacks.push(callback)
+  }
+
+  onExit(callback) {
+    this.exitCallbacks.push(callback)
+  }
+
+  write(data) {
+    if (this.process.stdin.writable) {
+      this.process.stdin.write(data)
+    }
+  }
+
+  resize(cols, rows) {
+    this.cols = cols
+    this.rows = rows
+    // Send SIGWINCH-like resize by setting env vars won't work mid-session
+    // but the initial size should be set
+  }
+
+  kill() {
+    this.process.kill('SIGHUP')
+  }
+}
+
+// PTY spawn function that works with both node-pty and fallback
+function spawnPty(shell, args, options) {
+  if (pty) {
+    return pty.spawn(shell, args, options)
+  }
+  return new FallbackPty(shell, args, options)
+}
 
 const dev = process.env.NODE_ENV !== 'production'
 const hostname = 'localhost'
@@ -420,7 +509,7 @@ app.prepare().then(() => {
 
       let ptyProcess
       try {
-        ptyProcess = pty.spawn(shell, [], {
+        ptyProcess = spawnPty(shell, [], {
           name: 'xterm-256color',
           cols: 80,
           rows: 24,
