@@ -735,7 +735,7 @@ export default function TerminalPanel({
           }}
           title={gestureMode ? 'Gesture Mode (tap to switch to scroll)' : 'Scroll Mode (tap to switch to gesture)'}
         >
-          {gestureMode ? <GestureIcon /> : <ScrollIcon />}
+          <GestureIcon />
         </button>
       </div>
 
@@ -1015,15 +1015,3 @@ function GestureIcon({ size = 24 }: { size?: number }) {
   )
 }
 
-function ScrollIcon({ size = 24 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      {/* Scroll/list icon */}
-      <path d="M3 6h18" />
-      <path d="M3 12h18" />
-      <path d="M3 18h18" />
-      <path d="M19 9l3-3-3-3" />
-      <path d="M19 21l3-3-3-3" />
-    </svg>
-  )
-}
