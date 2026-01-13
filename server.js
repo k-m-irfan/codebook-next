@@ -18,7 +18,7 @@ try {
   console.log('node-pty not available, using child_process fallback')
 }
 
-// Fallback PTY implementation using 'script' command for proper PTY on Linux/Termux
+// Fallback PTY implementation for Termux/Linux without node-pty
 class FallbackPty {
   constructor(shell, args, options) {
     this.shell = shell
@@ -28,40 +28,64 @@ class FallbackPty {
     this.cols = options.cols || 80
     this.rows = options.rows || 24
 
-    // Use 'script' command to create a PTY wrapper (works on Linux/Termux)
-    // script -q /dev/null runs without logging to file
-    const scriptArgs = ['-q', '/dev/null', shell, ...args]
+    // Try different methods to get a PTY-like experience
+    // Method 1: Use 'script' with Termux-compatible flags
+    // Method 2: Direct shell spawn as fallback
 
-    this.process = spawn('script', scriptArgs, {
+    let spawnCmd, spawnArgs
+
+    // Check if we're on Termux (Android)
+    const isTermux = process.platform === 'android' ||
+                     process.env.TERMUX_VERSION ||
+                     process.env.PREFIX?.includes('com.termux')
+
+    if (isTermux) {
+      // On Termux, use script command which is available via util-linux
+      // script -q -c "bash -i" /dev/null creates a proper PTY
+      spawnCmd = 'script'
+      spawnArgs = ['-q', '-c', `${shell} -i`, '/dev/null']
+    } else {
+      // On regular Linux, try script command
+      spawnCmd = 'script'
+      spawnArgs = ['-q', '/dev/null', shell, ...args]
+    }
+
+    console.log(`FallbackPty: spawning ${spawnCmd} with args:`, spawnArgs)
+
+    this.process = spawn(spawnCmd, spawnArgs, {
       cwd: options.cwd || os.homedir(),
       env: {
         ...process.env,
         ...options.env,
         TERM: 'xterm-256color',
         COLUMNS: String(this.cols),
-        LINES: String(this.rows)
+        LINES: String(this.rows),
+        PS1: '\\u@\\h:\\w\\$ '  // Set a simple prompt
       },
       stdio: ['pipe', 'pipe', 'pipe']
     })
 
-    // Handle stdout (this is the PTY output)
+    // Handle stdout
     this.process.stdout.on('data', (data) => {
       this.dataCallbacks.forEach(cb => cb(data.toString()))
     })
 
-    // Handle stderr
+    // Handle stderr - also send to terminal
     this.process.stderr.on('data', (data) => {
       this.dataCallbacks.forEach(cb => cb(data.toString()))
     })
 
     // Handle exit
     this.process.on('exit', (code) => {
+      console.log('FallbackPty: process exited with code', code)
       this.exitCallbacks.forEach(cb => cb(code))
     })
 
     this.process.on('error', (err) => {
+      console.error('FallbackPty: spawn error', err)
       this.dataCallbacks.forEach(cb => cb(`\r\nError: ${err.message}\r\n`))
     })
+
   }
 
   onData(callback) {
@@ -81,8 +105,6 @@ class FallbackPty {
   resize(cols, rows) {
     this.cols = cols
     this.rows = rows
-    // Send SIGWINCH-like resize by setting env vars won't work mid-session
-    // but the initial size should be set
   }
 
   kill() {
