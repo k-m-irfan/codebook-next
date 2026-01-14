@@ -7,6 +7,7 @@ import { ConnectionProvider } from './ConnectionContext'
 import { PasswordContext } from './PasswordContext'
 import BottomNav from './BottomNav'
 import { useKeyboardHeight } from './useKeyboardHeight'
+import { getFileType, FileType } from './fileTypes'
 
 const TerminalPanel = dynamic(() => import('./TerminalPanel'), {
   ssr: false,
@@ -47,6 +48,8 @@ export interface OpenFile {
   content: string
   originalContent: string
   isModified: boolean
+  fileType: FileType
+  encoding?: 'utf8' | 'base64'
 }
 
 export default function TerminalPage() {
@@ -77,7 +80,7 @@ export default function TerminalPage() {
   }, [])
 
   // Handle file open
-  const handleOpenFile = useCallback((path: string, name: string, content: string) => {
+  const handleOpenFile = useCallback((path: string, name: string, content: string, encoding?: string) => {
     const existingIndex = openFiles.findIndex(f => f.path === path)
     if (existingIndex >= 0) {
       setActiveFileIndex(existingIndex)
@@ -86,12 +89,15 @@ export default function TerminalPage() {
       return
     }
 
+    const fileType = getFileType(name)
     const newFile: OpenFile = {
       path,
       name,
       content,
       originalContent: content,
       isModified: false,
+      fileType,
+      encoding: encoding as 'utf8' | 'base64' | undefined,
     }
     setOpenFiles(prev => [...prev, newFile])
     setActiveFileIndex(openFiles.length)

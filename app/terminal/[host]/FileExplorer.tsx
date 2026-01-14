@@ -8,7 +8,7 @@ interface FileExplorerProps {
   workspacePath: string
   isFullscreen: boolean
   onSelectWorkspace: (path: string) => void
-  onOpenFile: (path: string, name: string, content: string) => void
+  onOpenFile: (path: string, name: string, content: string, encoding?: string) => void
 }
 
 function formatSize(bytes: number): string {
@@ -78,8 +78,8 @@ export default function FileExplorer({
     // Read file and open in editor
     setLoading(true)
     try {
-      const { content } = await readFile(entry.path)
-      onOpenFile(entry.path, entry.name, content)
+      const { content, encoding } = await readFile(entry.path)
+      onOpenFile(entry.path, entry.name, content, encoding)
     } catch (err: any) {
       setError(`Failed to open file: ${err.message}`)
     } finally {

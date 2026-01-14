@@ -26,6 +26,41 @@ const MonacoEditor = dynamic(() => import('./MonacoEditor'), {
   ),
 })
 
+const ImagePreview = dynamic(() => import('./previews/ImagePreview'), {
+  ssr: false,
+  loading: () => <PreviewLoading />,
+})
+
+const VideoPreview = dynamic(() => import('./previews/VideoPreview'), {
+  ssr: false,
+  loading: () => <PreviewLoading />,
+})
+
+const PdfPreview = dynamic(() => import('./previews/PdfPreview'), {
+  ssr: false,
+  loading: () => <PreviewLoading />,
+})
+
+const NotebookPreview = dynamic(() => import('./previews/NotebookPreview'), {
+  ssr: false,
+  loading: () => <PreviewLoading />,
+})
+
+function PreviewLoading() {
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      height: '100%',
+      background: '#0d0d1a',
+      color: '#888',
+    }}>
+      Loading preview...
+    </div>
+  )
+}
+
 interface EditorAreaProps {
   files: OpenFile[]
   activeIndex: number
@@ -329,6 +364,7 @@ export default function EditorArea({
             >
               <span className="tab-name">
                 {file.isModified && <span className="modified-dot" />}
+                {file.fileType !== 'text' && <FileTypeIcon type={file.fileType} />}
                 {file.name}
               </span>
               <button
@@ -345,20 +381,49 @@ export default function EditorArea({
         </div>
       </div>
 
-      {/* Editor */}
+      {/* Editor / Preview */}
       <div className="editor-container">
         {activeFile && (
-          <MonacoEditor
-            key={activeFile.path}
-            value={activeFile.content}
-            onChange={(content) => onFileChange(activeIndex, content)}
-            filename={activeFile.name}
-            onEditorMount={handleEditorMount}
-          />
+          activeFile.fileType === 'image' ? (
+            <ImagePreview
+              key={activeFile.path}
+              content={activeFile.content}
+              filename={activeFile.name}
+              encoding={activeFile.encoding}
+            />
+          ) : activeFile.fileType === 'video' ? (
+            <VideoPreview
+              key={activeFile.path}
+              content={activeFile.content}
+              filename={activeFile.name}
+              encoding={activeFile.encoding}
+            />
+          ) : activeFile.fileType === 'pdf' ? (
+            <PdfPreview
+              key={activeFile.path}
+              content={activeFile.content}
+              filename={activeFile.name}
+              encoding={activeFile.encoding}
+            />
+          ) : activeFile.fileType === 'notebook' ? (
+            <NotebookPreview
+              key={activeFile.path}
+              content={activeFile.content}
+              filename={activeFile.name}
+            />
+          ) : (
+            <MonacoEditor
+              key={activeFile.path}
+              value={activeFile.content}
+              onChange={(content) => onFileChange(activeIndex, content)}
+              filename={activeFile.name}
+              onEditorMount={handleEditorMount}
+            />
+          )
         )}
 
-        {/* Collapsible floating action buttons - bottom right */}
-        {activeFile && (
+        {/* Collapsible floating action buttons - bottom right (only for text files) */}
+        {activeFile && activeFile.fileType === 'text' && (
           <div
             className={`floating-actions ${actionsExpanded ? 'expanded' : ''}`}
             onMouseDown={(e) => e.preventDefault()}
@@ -666,4 +731,44 @@ function CollapseIcon() {
       <line x1="6" y1="6" x2="18" y2="18" />
     </svg>
   )
+}
+
+function FileTypeIcon({ type }: { type: string }) {
+  const iconStyle = { marginRight: '4px', flexShrink: 0 }
+
+  switch (type) {
+    case 'image':
+      return (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" strokeWidth="2" style={iconStyle}>
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+          <circle cx="8.5" cy="8.5" r="1.5" />
+          <polyline points="21 15 16 10 5 21" />
+        </svg>
+      )
+    case 'video':
+      return (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f472b6" strokeWidth="2" style={iconStyle}>
+          <polygon points="23 7 16 12 23 17 23 7" />
+          <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+        </svg>
+      )
+    case 'pdf':
+      return (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" style={iconStyle}>
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+          <line x1="16" y1="13" x2="8" y2="13" />
+          <line x1="16" y1="17" x2="8" y2="17" />
+        </svg>
+      )
+    case 'notebook':
+      return (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" style={iconStyle}>
+          <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+          <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+        </svg>
+      )
+    default:
+      return null
+  }
 }
