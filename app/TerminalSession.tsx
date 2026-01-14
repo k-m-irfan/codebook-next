@@ -260,7 +260,7 @@ export default function TerminalSession({ sessionId, host, isActive }: TerminalS
             top: 0;
             left: 0;
             right: 0;
-            bottom: 0;
+            bottom: ${isKeyboardVisible ? '0' : 'var(--bottom-nav-height)'};
             background: #16213e;
             z-index: 10;
             display: flex;
@@ -338,6 +338,7 @@ export default function TerminalSession({ sessionId, host, isActive }: TerminalS
             }
             .explorer-panel {
               left: var(--left-nav-width);
+              bottom: 0;
             }
           }
         `}</style>

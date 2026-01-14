@@ -291,14 +291,29 @@ export default function TerminalPanel({
       const ws = new WebSocket(wsUrl)
       const tabId = tab.id
 
+      // Keepalive ping interval to prevent connection timeout
+      let pingInterval: ReturnType<typeof setInterval> | null = null
+
       ws.onopen = () => {
         console.log('WebSocket connected for tab:', tabId)
         setTabs(prev => prev.map(t =>
           t.id === tabId ? { ...t, connected: true } : t
         ))
+
+        // Start keepalive ping every 30 seconds
+        pingInterval = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'ping' }))
+          }
+        }, 30000)
       }
 
       ws.onclose = () => {
+        // Clear keepalive interval
+        if (pingInterval) {
+          clearInterval(pingInterval)
+          pingInterval = null
+        }
         setTabs(prev => prev.map(t =>
           t.id === tabId ? { ...t, connected: false } : t
         ))
@@ -362,6 +377,8 @@ export default function TerminalPanel({
             setShowPasswordModal(true)
             return
           }
+          // Ignore pong responses (keepalive) and file operation responses
+          if (parsed.type === 'pong') return
           if (parsed.type?.startsWith('file:')) return
         } catch {
           // Not JSON - terminal data, connection is ready

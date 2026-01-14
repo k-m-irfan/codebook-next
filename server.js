@@ -571,6 +571,9 @@ app.prepare().then(() => {
             console.log('Local WS received JSON message:', parsed.type)
             if (parsed.type === 'resize') {
               ptyProcess.resize(parsed.cols, parsed.rows)
+            } else if (parsed.type === 'ping') {
+              // Keepalive ping - respond with pong
+              ws.send(JSON.stringify({ type: 'pong' }))
             } else if (parsed.type?.startsWith('file:')) {
               // Handle file operations
               console.log('Routing to handleLocalFileOperation')
@@ -661,6 +664,9 @@ app.prepare().then(() => {
               if (shellStream) {
                 shellStream.setWindow(parsed.rows, parsed.cols, 0, 0)
               }
+            } else if (parsed.type === 'ping') {
+              // Keepalive ping - respond with pong
+              ws.send(JSON.stringify({ type: 'pong' }))
             } else if (parsed.type === 'auth:password') {
               // Handle password submission
               if (passwordResolver) {
@@ -708,6 +714,8 @@ app.prepare().then(() => {
         port: parseInt(hostConfig.port) || 22,
         username: hostConfig.user || os.userInfo().username,
         tryKeyboard: true, // Enable keyboard-interactive for password fallback
+        keepaliveInterval: 30000, // Send SSH keepalive every 30 seconds
+        keepaliveCountMax: 3, // Disconnect after 3 failed keepalives
       }
 
       // Try to find a working private key
@@ -861,7 +869,9 @@ app.prepare().then(() => {
               host: connectConfig.host,
               port: connectConfig.port,
               username: connectConfig.username,
-              password: password
+              password: password,
+              keepaliveInterval: 30000,
+              keepaliveCountMax: 3,
             })
           }
         } else if (!waitingForPassword) {
