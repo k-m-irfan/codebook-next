@@ -6,6 +6,8 @@ import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import { usePassword } from './PasswordContext'
 import QuickKeysPanel, { QuickKeysPanelRef } from './QuickKeysPanel'
+import { TerminalTabState } from '@/lib/session-storage'
+import { serializeTerminalBuffer, restoreTerminalBuffer } from '@/lib/terminal-serializer'
 
 interface TerminalTab {
   id: string
@@ -15,6 +17,7 @@ interface TerminalTab {
   fitAddon: FitAddon | null
   connected: boolean
   containerEl: HTMLDivElement | null
+  initialContent?: string // Content to restore after connection
 }
 
 interface TerminalPanelProps {
@@ -22,6 +25,9 @@ interface TerminalPanelProps {
   workspacePath: string
   isVisible?: boolean
   isKeyboardVisible?: boolean
+  sessionId?: string | null
+  initialTerminalTabs?: TerminalTabState[]
+  onTerminalStateChange?: (tabs: TerminalTabState[], activeTabId: string | null) => void
 }
 
 export default function TerminalPanel({
@@ -29,8 +35,12 @@ export default function TerminalPanel({
   workspacePath,
   isVisible = false,
   isKeyboardVisible = false,
+  sessionId = null,
+  initialTerminalTabs = [],
+  onTerminalStateChange,
 }: TerminalPanelProps) {
   const { password: cachedPassword, setPassword: setCachedPassword } = usePassword()
+  const initialTabsRestoredRef = useRef(false)
 
   // On mount, check sessionStorage for password from home page
   useEffect(() => {
@@ -122,21 +132,66 @@ export default function TerminalPanel({
     }
   }, [flushWrites])
 
-  // Create a new terminal tab
-  const createTab = useCallback(() => {
-    const id = `term-${Date.now()}-${++tabCounter.current}`
-    const newTab: TerminalTab = {
-      id,
-      title: `Terminal ${tabCounter.current}`,
-      ws: null,
-      term: null,
-      fitAddon: null,
-      connected: false,
-      containerEl: null,
+  // Create a new terminal tab (optionally with restored state)
+  const createTab = useCallback((restoredState?: { id: string; title: string; initialContent?: string }) => {
+    let id: string
+    let title: string
+    let newTabRef: TerminalTab | null = null
+
+    if (restoredState) {
+      id = restoredState.id
+      title = restoredState.title
+      newTabRef = {
+        id,
+        title,
+        ws: null,
+        term: null,
+        fitAddon: null,
+        connected: false,
+        containerEl: null,
+        initialContent: restoredState.initialContent,
+      }
+      setTabs(prev => [...prev, newTabRef!])
+    } else {
+      // Find lowest available number by checking current tabs
+      setTabs(prev => {
+        const usedNumbers = new Set(
+          prev
+            .filter(t => t.title.startsWith('Terminal '))
+            .map(t => {
+              const num = parseInt(t.title.replace('Terminal ', ''), 10)
+              return isNaN(num) ? 0 : num
+            })
+        )
+        let nextNum = 1
+        while (usedNumbers.has(nextNum)) {
+          nextNum++
+        }
+
+        id = `term-${Date.now()}-${nextNum}`
+        title = `Terminal ${nextNum}`
+
+        newTabRef = {
+          id,
+          title,
+          ws: null,
+          term: null,
+          fitAddon: null,
+          connected: false,
+          containerEl: null,
+        }
+        return [...prev, newTabRef]
+      })
     }
-    setTabs(prev => [...prev, newTab])
-    setActiveTabId(id)
-    return id
+
+    // Use setTimeout to ensure setTabs has completed before setting activeTabId
+    setTimeout(() => {
+      if (newTabRef) {
+        setActiveTabId(newTabRef.id)
+      }
+    }, 0)
+
+    return id!
   }, [])
 
   // Close a terminal tab
@@ -158,12 +213,27 @@ export default function TerminalPanel({
     })
   }, [activeTabId])
 
-  // Initialize first tab on mount
+  // Initialize tabs on mount (restore from session or create new)
   useEffect(() => {
-    if (tabs.length === 0) {
-      createTab()
+    if (tabs.length === 0 && !initialTabsRestoredRef.current) {
+      initialTabsRestoredRef.current = true
+
+      if (initialTerminalTabs && initialTerminalTabs.length > 0) {
+        // Restore tabs from session
+        initialTerminalTabs.forEach((tabState, index) => {
+          createTab({
+            id: tabState.id,
+            title: tabState.title,
+            initialContent: tabState.scrollbackBuffer,
+          })
+        })
+        console.log(`Restored ${initialTerminalTabs.length} terminal tabs from session`)
+      } else {
+        // Create a fresh tab
+        createTab()
+      }
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [initialTerminalTabs]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Show/hide terminal containers based on active tab
   useEffect(() => {
@@ -172,17 +242,9 @@ export default function TerminalPanel({
         tab.containerEl.style.display = tab.id === activeTabId ? 'block' : 'none'
       }
     })
-    // Fit the active terminal
-    const activeTab = tabs.find(t => t.id === activeTabId)
-    if (activeTab?.fitAddon) {
-      setTimeout(() => {
-        try {
-          activeTab.fitAddon?.fit()
-        } catch (e) {
-          // Ignore
-        }
-      }, 50)
-    }
+    // Note: We don't call fit() here - the ResizeObserver will handle fitting
+    // when the container becomes visible. Calling fit() here was causing
+    // unnecessary resize events that triggered the shell's partial line indicator (%)
   }, [activeTabId, tabs])
 
   // Setup terminal for tabs that don't have one yet
@@ -243,6 +305,7 @@ export default function TerminalPanel({
       }
 
       let initialCommandsSent = false
+      const hasInitialContent = !!tab.initialContent
 
       const sendInitialCommands = () => {
         if (initialCommandsSent) return
@@ -251,10 +314,23 @@ export default function TerminalPanel({
           try {
             fitAddon.fit()
             ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }))
+
+            // If restoring from session, write initial content first
+            if (hasInitialContent && tab.initialContent) {
+              restoreTerminalBuffer(term, tab.initialContent)
+              // Clear the initial content after restoration
+              setTabs(prev => prev.map(t =>
+                t.id === tabId ? { ...t, initialContent: undefined } : t
+              ))
+            }
+
+            // Send cd command if workspace set, otherwise just clear (unless restoring)
             if (workspacePath) {
-              const cdCommand = workspacePath.includes(' ') ? `cd "${workspacePath}" && clear\n` : `cd ${workspacePath} && clear\n`
+              const cdCommand = hasInitialContent
+                ? `cd "${workspacePath.includes(' ') ? workspacePath : workspacePath}"\n`
+                : workspacePath.includes(' ') ? `cd "${workspacePath}" && clear\n` : `cd ${workspacePath} && clear\n`
               ws.send(cdCommand)
-            } else {
+            } else if (!hasInitialContent) {
               ws.send('clear\n')
             }
           } catch (e) {
@@ -351,14 +427,41 @@ export default function TerminalPanel({
 
       // Add debounced resize observer for this terminal
       let resizeTimeout: ReturnType<typeof setTimeout> | null = null
+      let lastCols = 0
+      let lastRows = 0
+      let wasHidden = true // Track if container was previously hidden
       const resizeObserver = new ResizeObserver(() => {
         if (resizeTimeout) clearTimeout(resizeTimeout)
         resizeTimeout = setTimeout(() => {
           try {
-            fitAddon.fit()
-            if (ws.readyState === WebSocket.OPEN) {
-              ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }))
+            // Check if container is actually visible
+            const isVisible = termDiv.style.display !== 'none' && termDiv.offsetParent !== null
+
+            if (!isVisible) {
+              // Container is hidden, just mark it and skip
+              wasHidden = true
+              return
             }
+
+            fitAddon.fit()
+            const newCols = term.cols
+            const newRows = term.rows
+
+            // Only send resize if:
+            // 1. We have valid previous dimensions (lastCols > 0 && lastRows > 0)
+            // 2. Dimensions actually changed
+            // 3. Container wasn't just shown (wasHidden was false)
+            // This prevents resize when switching tabs
+            if (ws.readyState === WebSocket.OPEN &&
+                lastCols > 0 && lastRows > 0 &&
+                !wasHidden &&
+                (newCols !== lastCols || newRows !== lastRows)) {
+              ws.send(JSON.stringify({ type: 'resize', cols: newCols, rows: newRows }))
+            }
+
+            lastCols = newCols
+            lastRows = newRows
+            wasHidden = false
           } catch (e) {
             // Ignore
           }
@@ -615,26 +718,58 @@ export default function TerminalPanel({
   }, [workspacePath, activeTabId, tabs])
 
   // Re-fit terminal when panel becomes visible
+  // Note: We only call fit() here - the ResizeObserver handles sending resize events
+  // This prevents unnecessary resize events that trigger shell's partial line indicator (%)
   useEffect(() => {
     if (isVisible) {
       // Small delay to ensure container has proper dimensions
       const timer = setTimeout(() => {
-        tabs.forEach(tab => {
-          if (tab.fitAddon && tab.ws?.readyState === WebSocket.OPEN) {
-            try {
-              tab.fitAddon.fit()
-              if (tab.term) {
-                tab.ws.send(JSON.stringify({ type: 'resize', cols: tab.term.cols, rows: tab.term.rows }))
-              }
-            } catch (e) {
-              // Ignore
-            }
+        // Only fit the active tab - hidden tabs will be fit when they become visible
+        const activeTab = tabs.find(t => t.id === activeTabId)
+        if (activeTab?.fitAddon) {
+          try {
+            activeTab.fitAddon.fit()
+          } catch (e) {
+            // Ignore
           }
-        })
+        }
       }, 100)
       return () => clearTimeout(timer)
     }
-  }, [isVisible, tabs])
+  }, [isVisible, tabs, activeTabId])
+
+  // Periodic serialization to persist terminal state (every 5 seconds)
+  useEffect(() => {
+    if (!sessionId || !onTerminalStateChange) return
+
+    const interval = setInterval(() => {
+      const serializedTabs: TerminalTabState[] = tabs.map(tab => ({
+        id: tab.id,
+        title: tab.title,
+        scrollbackBuffer: tab.term ? serializeTerminalBuffer(tab.term) : '',
+      }))
+      onTerminalStateChange(serializedTabs, activeTabId)
+    }, 5000)
+
+    return () => clearInterval(interval)
+  }, [sessionId, tabs, activeTabId, onTerminalStateChange])
+
+  // Also serialize when tabs are created or closed
+  useEffect(() => {
+    if (!sessionId || !onTerminalStateChange) return
+
+    // Debounce to avoid too frequent updates
+    const timer = setTimeout(() => {
+      const serializedTabs: TerminalTabState[] = tabs.map(tab => ({
+        id: tab.id,
+        title: tab.title,
+        scrollbackBuffer: tab.term ? serializeTerminalBuffer(tab.term) : '',
+      }))
+      onTerminalStateChange(serializedTabs, activeTabId)
+    }, 500)
+
+    return () => clearTimeout(timer)
+  }, [tabs.length, activeTabId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const activeTab = tabs.find(t => t.id === activeTabId)
 
@@ -704,7 +839,7 @@ export default function TerminalPanel({
               </button>
             </div>
           ))}
-          <button className="add-tab-btn" onClick={createTab} title="New Terminal">
+          <button className="add-tab-btn" onClick={() => createTab()} title="New Terminal">
             <PlusIcon />
           </button>
         </div>

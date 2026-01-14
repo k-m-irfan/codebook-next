@@ -1,13 +1,20 @@
 'use client'
 
-import { useState, useCallback } from 'react'
-import { useParams } from 'next/navigation'
+import { useState, useCallback, useEffect, useRef, Suspense } from 'react'
+import { useParams, useSearchParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { ConnectionProvider } from './ConnectionContext'
 import { PasswordContext } from './PasswordContext'
 import BottomNav from './BottomNav'
 import { useKeyboardHeight } from './useKeyboardHeight'
 import { getFileType, FileType } from './fileTypes'
+import {
+  Session,
+  TerminalTabState,
+  createSession,
+  getSession,
+  saveSession,
+} from '@/lib/session-storage'
 
 const TerminalPanel = dynamic(() => import('./TerminalPanel'), {
   ssr: false,
@@ -54,10 +61,20 @@ export interface OpenFile {
 
 export default function TerminalPage() {
   const params = useParams()
+  const searchParams = useSearchParams()
   const host = params.host as string
+  const sessionIdParam = searchParams.get('session')
 
   // Cached password for this host session
   const [cachedPassword, setCachedPassword] = useState<string | null>(null)
+
+  // Session state
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
+  const [terminalTabs, setTerminalTabs] = useState<TerminalTabState[]>([])
+  const [activeTerminalTabId, setActiveTerminalTabId] = useState<string | null>(null)
+  const [sessionReady, setSessionReady] = useState(false) // Flag to indicate session is ready
+  const sessionInitialized = useRef(false)
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Workspace state
   const [workspacePath, setWorkspacePath] = useState<string>('')
@@ -73,6 +90,112 @@ export default function TerminalPage() {
   // Open files in editor
   const [openFiles, setOpenFiles] = useState<OpenFile[]>([])
   const [activeFileIndex, setActiveFileIndex] = useState<number>(-1)
+
+  // Initialize or restore session on mount
+  useEffect(() => {
+    if (sessionInitialized.current) return
+    sessionInitialized.current = true
+
+    if (sessionIdParam) {
+      // Restore existing session
+      const session = getSession(sessionIdParam)
+      if (session) {
+        setCurrentSessionId(session.id)
+        setWorkspacePath(session.workspacePath)
+        setOpenFiles(session.openFiles)
+        setActiveFileIndex(session.activeFileIndex)
+        setTerminalTabs(session.terminalTabs)
+        setActiveTerminalTabId(session.activeTerminalTabId)
+        console.log('Restored session:', session.name, 'with', session.terminalTabs.length, 'terminal tabs')
+        // Mark session as ready after state is set
+        setTimeout(() => setSessionReady(true), 0)
+        return
+      }
+    }
+
+    // Create new session
+    const newSession = createSession(host)
+    setCurrentSessionId(newSession.id)
+    saveSession(newSession)
+    console.log('Created new session:', newSession.name)
+    setSessionReady(true)
+  }, [sessionIdParam, host])
+
+  // Debounced save function
+  const debouncedSave = useCallback(() => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current)
+    }
+    saveTimeoutRef.current = setTimeout(() => {
+      if (!currentSessionId) return
+
+      const session: Session = {
+        id: currentSessionId,
+        host,
+        name: '', // Will be preserved from existing
+        workspacePath,
+        openFiles,
+        terminalTabs,
+        activeFileIndex,
+        activeTerminalTabId,
+        createdAt: '', // Will be preserved from existing
+        lastAccessedAt: new Date().toISOString(),
+      }
+
+      // Get existing session to preserve name and createdAt
+      const existing = getSession(currentSessionId)
+      if (existing) {
+        session.name = existing.name
+        session.createdAt = existing.createdAt
+      } else {
+        session.name = `${host === 'local' ? 'Local' : host} - ${new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`
+        session.createdAt = new Date().toISOString()
+      }
+
+      saveSession(session)
+    }, 2000) // Save 2 seconds after last change
+  }, [currentSessionId, host, workspacePath, openFiles, terminalTabs, activeFileIndex, activeTerminalTabId])
+
+  // Auto-save on state changes
+  useEffect(() => {
+    if (!currentSessionId) return
+    debouncedSave()
+  }, [workspacePath, openFiles, activeFileIndex, terminalTabs, activeTerminalTabId, debouncedSave, currentSessionId])
+
+  // Save on unmount/beforeunload
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (!currentSessionId) return
+
+      // Sync save
+      const existing = getSession(currentSessionId)
+      const session: Session = {
+        id: currentSessionId,
+        host,
+        name: existing?.name || `${host === 'local' ? 'Local' : host}`,
+        workspacePath,
+        openFiles,
+        terminalTabs,
+        activeFileIndex,
+        activeTerminalTabId,
+        createdAt: existing?.createdAt || new Date().toISOString(),
+        lastAccessedAt: new Date().toISOString(),
+      }
+      saveSession(session)
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+      handleBeforeUnload() // Also save on component unmount
+    }
+  }, [currentSessionId, host, workspacePath, openFiles, terminalTabs, activeFileIndex, activeTerminalTabId])
+
+  // Handle terminal state changes from TerminalPanel
+  const handleTerminalStateChange = useCallback((tabs: TerminalTabState[], activeTabId: string | null) => {
+    setTerminalTabs(tabs)
+    setActiveTerminalTabId(activeTabId)
+  }, [])
 
   // Handle workspace selection
   const handleSelectWorkspace = useCallback((path: string) => {
@@ -190,12 +313,17 @@ export default function TerminalPage() {
 
           {/* Terminal Panel - Fullscreen (always mounted, hidden when not active) */}
           <div className={`terminal-fullscreen ${isTerminalFullscreen ? 'visible' : 'hidden'}`}>
-            <TerminalPanel
-              host={host}
-              workspacePath={workspacePath}
-              isVisible={isTerminalFullscreen}
-              isKeyboardVisible={isKeyboardVisible}
-            />
+            {sessionReady && (
+              <TerminalPanel
+                host={host}
+                workspacePath={workspacePath}
+                isVisible={isTerminalFullscreen}
+                isKeyboardVisible={isKeyboardVisible}
+                sessionId={currentSessionId}
+                initialTerminalTabs={terminalTabs}
+                onTerminalStateChange={handleTerminalStateChange}
+              />
+            )}
           </div>
 
           {/* Editor Area - Hidden when explorer or terminal is fullscreen */}

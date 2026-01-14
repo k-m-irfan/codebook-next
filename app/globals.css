@@ -219,6 +219,12 @@ body {
   white-space: nowrap;
 }
 
+.session-time {
+  font-size: 0.75rem;
+  color: #555;
+  margin-top: 2px;
+}
+
 .host-actions {
   display: flex;
   gap: 8px;
@@ -330,6 +336,7 @@ body {
 }
 
 .nav-btn {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -369,6 +376,23 @@ body {
   font-size: 0.7rem;
   font-weight: 500;
   letter-spacing: 0.2px;
+}
+
+.nav-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  background: #4a7cff;
+  border-radius: 9px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Landscape mode - move nav to left side (mobile landscape or desktop/laptop) */
