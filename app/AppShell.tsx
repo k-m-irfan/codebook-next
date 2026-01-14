@@ -37,6 +37,7 @@ function AppShellInner({ homeContent }: AppShellProps) {
           visibility: isHome ? 'visible' : 'hidden',
           pointerEvents: isHome ? 'auto' : 'none',
           zIndex: isHome ? 1 : 0,
+          overflowY: 'auto',
         }}
       >
         {homeContent}
