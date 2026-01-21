@@ -2,6 +2,7 @@
 
 import { ReactNode } from 'react'
 import { SessionManagerProvider, useSessionManager } from './SessionManager'
+import { SettingsProvider } from './SettingsContext'
 import dynamic from 'next/dynamic'
 
 // Dynamically import TerminalSession to avoid SSR issues
@@ -87,8 +88,10 @@ function AppShellInner({ homeContent }: AppShellProps) {
 
 export default function AppShell({ homeContent }: AppShellProps) {
   return (
-    <SessionManagerProvider>
-      <AppShellInner homeContent={homeContent} />
-    </SessionManagerProvider>
+    <SettingsProvider>
+      <SessionManagerProvider>
+        <AppShellInner homeContent={homeContent} />
+      </SessionManagerProvider>
+    </SettingsProvider>
   )
 }

@@ -3,6 +3,7 @@
 import { useRef, useCallback, useEffect, useState } from 'react'
 import Editor, { type Monaco } from '@monaco-editor/react'
 import type { editor } from 'monaco-editor'
+import { useSettings } from '@/app/SettingsContext'
 
 interface MonacoEditorProps {
   value: string
@@ -94,16 +95,17 @@ export default function MonacoEditor({
   onEditorMount
 }: MonacoEditorProps) {
   const language = getLanguage(filename)
+  const { settings } = useSettings()
   const editorInstanceRef = useRef<editor.IStandaloneCodeEditor | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const [fontSize, setFontSize] = useState(14)
+  const [fontSize, setFontSize] = useState(settings.editorFontSize)
 
   // Pinch state refs for event handlers (refs don't have stale closure issues)
   const pinchRef = useRef({
     initialDistance: 0,
-    initialFontSize: 14,
+    initialFontSize: settings.editorFontSize,
   })
-  const fontSizeRef = useRef(14)
+  const fontSizeRef = useRef(settings.editorFontSize)
 
   const MIN_FONT_SIZE = 8
   const MAX_FONT_SIZE = 32
@@ -119,6 +121,18 @@ export default function MonacoEditor({
   useEffect(() => {
     fontSizeRef.current = fontSize
   }, [fontSize])
+
+  // Sync with settings when they change (e.g., when user changes in settings modal)
+  useEffect(() => {
+    if (settings.editorFontSize !== fontSize) {
+      setFontSize(settings.editorFontSize)
+      fontSizeRef.current = settings.editorFontSize
+      pinchRef.current.initialFontSize = settings.editorFontSize
+      if (editorInstanceRef.current) {
+        editorInstanceRef.current.updateOptions({ fontSize: settings.editorFontSize })
+      }
+    }
+  }, [settings.editorFontSize]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Handle pinch gestures on the container
   useEffect(() => {

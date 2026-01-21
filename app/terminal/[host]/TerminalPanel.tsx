@@ -8,6 +8,7 @@ import { usePassword } from './PasswordContext'
 import QuickKeysPanel, { QuickKeysPanelRef } from './QuickKeysPanel'
 import { TerminalTabState } from '@/lib/session-storage'
 import { serializeTerminalBuffer, restoreTerminalBuffer } from '@/lib/terminal-serializer'
+import { useSettings } from '@/app/SettingsContext'
 
 interface TerminalTab {
   id: string
@@ -40,6 +41,7 @@ export default function TerminalPanel({
   onTerminalStateChange,
 }: TerminalPanelProps) {
   const { password: cachedPassword, setPassword: setCachedPassword } = usePassword()
+  const { settings } = useSettings()
   const initialTabsRestoredRef = useRef(false)
 
   // On mount, check sessionStorage for password from home page
@@ -267,7 +269,7 @@ export default function TerminalPanel({
 
       const term = new Terminal({
         cursorBlink: true,
-        fontSize: 13,
+        fontSize: settings.terminalFontSize,
         fontFamily: 'Menlo, Monaco, "Courier New", monospace',
         theme: {
           background: '#0f0f23',
@@ -520,7 +522,7 @@ export default function TerminalPanel({
         // Pinch-to-zoom state
         let isPinching = false
         let initialPinchDistance = 0
-        let initialFontSize = 13
+        let initialFontSize = settings.terminalFontSize
         const MIN_FONT_SIZE = 8
         const MAX_FONT_SIZE = 32
 
@@ -771,7 +773,7 @@ export default function TerminalPanel({
         t.id === tabId ? { ...t, ws, term, fitAddon, containerEl: termDiv } : t
       ))
     })
-  }, [tabs, activeTabId, host, workspacePath, cachedPassword, queueWrite])
+  }, [tabs, activeTabId, host, workspacePath, cachedPassword, queueWrite, settings.terminalFontSize])
 
   // Change directory when workspace changes
   useEffect(() => {
@@ -805,6 +807,26 @@ export default function TerminalPanel({
       return () => clearTimeout(timer)
     }
   }, [isVisible, tabs, activeTabId])
+
+  // Update font size for all existing terminals when settings change
+  useEffect(() => {
+    tabs.forEach(tab => {
+      if (tab.term && tab.term.options.fontSize !== settings.terminalFontSize) {
+        tab.term.options.fontSize = settings.terminalFontSize
+        if (tab.fitAddon) {
+          try {
+            tab.fitAddon.fit()
+            // Send resize to server
+            if (tab.ws?.readyState === WebSocket.OPEN) {
+              tab.ws.send(JSON.stringify({ type: 'resize', cols: tab.term.cols, rows: tab.term.rows }))
+            }
+          } catch (e) {
+            // Ignore
+          }
+        }
+      }
+    })
+  }, [settings.terminalFontSize, tabs])
 
   // Periodic serialization to persist terminal state (every 5 seconds)
   useEffect(() => {
