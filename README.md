@@ -23,28 +23,49 @@ A VSCode-like IDE designed for smartphones and tablets. While it works on deskto
 - **Session Management** - Keep multiple sessions alive and switch between them
 - **PWA Support** - Install as a standalone app on your device
 
-## Installation (Termux on Android)
+## Installation
 
 ### Prerequisites
-Make sure you have `curl` installed in Termux:
+Make sure you have `curl` installed:
+
+**Termux (Android):**
 ```bash
 pkg install curl
 ```
 
+**Linux (Debian/Ubuntu):**
+```bash
+sudo apt install curl
+```
+
 ### Quick Install
-Run the following command in Termux:
+Run the following command:
 ```bash
 curl -sL https://raw.githubusercontent.com/k-m-irfan/codebook-next/main/install.sh | bash
 ```
 
 ### Manual Installation
+
+**Termux (Android):**
 ```bash
 cd ~
 pkg install git nodejs
 git clone https://github.com/k-m-irfan/codebook-next.git
 cd codebook-next
 npm install
+npm run build
 echo "cd ~/codebook-next && npm run start &" >> ~/.bash_profile
+```
+
+**Linux (Debian/Ubuntu):**
+```bash
+cd ~
+sudo apt install git nodejs npm
+git clone https://github.com/k-m-irfan/codebook-next.git
+cd codebook-next
+npm install
+npm run build
+echo "cd ~/codebook-next && npm run start &" >> ~/.bashrc
 ```
 
 ### Post-Installation
