@@ -31,7 +31,7 @@ body {
   max-width: 600px;
   width: 100%;
   margin: 0 auto;
-  padding: 24px 16px 120px;
+  padding: 24px 16px 108px;
 }
 
 /* Page Header */
@@ -347,8 +347,8 @@ body {
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   border-top: 1px solid rgba(255, 255, 255, 0.05);
-  padding: 8px 12px;
-  padding-bottom: max(8px, env(safe-area-inset-bottom));
+  padding: 6px 11px;
+  padding-bottom: max(6px, env(safe-area-inset-bottom));
   position: fixed;
   bottom: 0;
   left: 0;
@@ -371,16 +371,16 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 3px;
   background: none;
   border: none;
   color: #666;
   cursor: pointer;
-  padding: 10px 16px;
-  border-radius: 12px;
+  padding: 8px 14px;
+  border-radius: 11px;
   transition: all 0.2s;
-  min-width: 72px;
-  min-height: 56px;
+  min-width: 65px;
+  min-height: 50px;
 }
 
 .nav-btn:hover {
@@ -398,8 +398,8 @@ body {
 }
 
 .nav-icon {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
 }
 
 .nav-label {
@@ -451,18 +451,18 @@ body {
   }
 
   .nav-btn {
-    padding: 12px 8px;
+    padding: 10px 7px;
     min-width: auto;
-    width: 56px;
-    min-height: 56px;
-    gap: 4px;
-    border-radius: 14px;
+    width: 50px;
+    min-height: 50px;
+    gap: 3px;
+    border-radius: 12px;
     justify-content: center;
   }
 
   .nav-icon {
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
   }
 
   .nav-label {

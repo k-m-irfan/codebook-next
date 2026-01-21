@@ -13,8 +13,8 @@ interface SettingsContextType {
 }
 
 const defaultSettings: Settings = {
-  terminalFontSize: 13,
-  editorFontSize: 14,
+  terminalFontSize: 10,
+  editorFontSize: 10,
 }
 
 const SettingsContext = createContext<SettingsContextType | null>(null)

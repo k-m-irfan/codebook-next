@@ -498,7 +498,7 @@ export default function EditorArea({
           align-items: center;
           background: rgba(22, 33, 62, 0.95);
           border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-          min-height: 44px;
+          min-height: 40px;
           padding: 0 4px;
         }
         .tabs {
@@ -516,16 +516,16 @@ export default function EditorArea({
         .tab {
           display: flex;
           align-items: center;
-          gap: 8px;
-          padding: 10px 14px;
-          min-height: 36px;
+          gap: 7px;
+          padding: 8px 12px;
+          min-height: 32px;
           background: rgba(255, 255, 255, 0.03);
           border: 1px solid transparent;
-          border-radius: 10px;
+          border-radius: 9px;
           color: #888;
           cursor: pointer;
           white-space: nowrap;
-          font-size: 0.85rem;
+          font-size: 0.82rem;
           transition: all 0.15s;
         }
         .tab:hover {
@@ -559,13 +559,13 @@ export default function EditorArea({
           display: flex;
           align-items: center;
           justify-content: center;
-          width: 24px;
-          height: 24px;
+          width: 22px;
+          height: 22px;
           background: none;
           border: none;
           color: #666;
           cursor: pointer;
-          border-radius: 6px;
+          border-radius: 5px;
           padding: 0;
           transition: all 0.15s;
         }

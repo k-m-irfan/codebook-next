@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef, useEffect, useImperativeHandle, forwardRef, useMemo } from 'react'
+import { useState, useCallback, useRef, useEffect, useImperativeHandle, forwardRef } from 'react'
 
 interface Modifiers {
   ctrl: boolean
@@ -47,28 +47,6 @@ const QUICK_KEYS: QuickKey[] = [
 ]
 
 const TAP_THRESHOLD = 10 // Max movement in pixels to consider it a tap
-const STORAGE_KEY = 'quickkeys-usage'
-
-// Load usage data from localStorage
-function loadUsageData(): Record<string, number> {
-  if (typeof window === 'undefined') return {}
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    return stored ? JSON.parse(stored) : {}
-  } catch {
-    return {}
-  }
-}
-
-// Save usage data to localStorage
-function saveUsageData(usage: Record<string, number>) {
-  if (typeof window === 'undefined') return
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(usage))
-  } catch {
-    // Ignore storage errors
-  }
-}
 
 const QuickKeysPanel = forwardRef<QuickKeysPanelRef, QuickKeysPanelProps>(
   function QuickKeysPanel({ onKeyPress, onModifierChange }, ref) {
@@ -77,23 +55,6 @@ const QuickKeysPanel = forwardRef<QuickKeysPanelRef, QuickKeysPanelProps>(
       alt: false,
       shift: false,
     })
-
-    // Track key usage for sorting
-    const [keyUsage, setKeyUsage] = useState<Record<string, number>>({})
-
-    // Load usage data on mount
-    useEffect(() => {
-      setKeyUsage(loadUsageData())
-    }, [])
-
-    // Sort keys by usage frequency (most used first)
-    const sortedKeys = useMemo(() => {
-      return [...QUICK_KEYS].sort((a, b) => {
-        const usageA = keyUsage[a.label] || 0
-        const usageB = keyUsage[b.label] || 0
-        return usageB - usageA
-      })
-    }, [keyUsage])
 
     // Track touch start position for tap vs swipe detection
     const touchStartRef = useRef<{ x: number; y: number } | null>(null)
@@ -110,19 +71,7 @@ const QuickKeysPanel = forwardRef<QuickKeysPanelRef, QuickKeysPanelProps>(
       onModifierChange?.(modifiers)
     }, [modifiers, onModifierChange])
 
-    // Update usage count for a key
-    const incrementUsage = useCallback((label: string) => {
-      setKeyUsage(prev => {
-        const updated = { ...prev, [label]: (prev[label] || 0) + 1 }
-        saveUsageData(updated)
-        return updated
-      })
-    }, [])
-
     const handleKeyPress = useCallback((key: QuickKey) => {
-      // Track usage
-      incrementUsage(key.label)
-
       if (key.type === 'modifier') {
         // Toggle modifier state
         setModifiers(prev => ({
@@ -159,7 +108,7 @@ const QuickKeysPanel = forwardRef<QuickKeysPanelRef, QuickKeysPanelProps>(
       if (modifiers.ctrl || modifiers.alt || modifiers.shift) {
         setModifiers({ ctrl: false, alt: false, shift: false })
       }
-    }, [modifiers, onKeyPress, incrementUsage])
+    }, [modifiers, onKeyPress])
 
     const handleTouchStart = useCallback((e: React.TouchEvent, _key: QuickKey) => {
       e.stopPropagation()
@@ -191,7 +140,7 @@ const QuickKeysPanel = forwardRef<QuickKeysPanelRef, QuickKeysPanelProps>(
         className="quick-keys-panel"
         onMouseDown={(e) => e.preventDefault()}
       >
-        {sortedKeys.map((key) => (
+        {QUICK_KEYS.map((key) => (
           <button
             key={key.label}
             className={`quick-key ${key.type === 'modifier' ? 'modifier' : ''} ${
@@ -214,10 +163,10 @@ const QuickKeysPanel = forwardRef<QuickKeysPanelRef, QuickKeysPanelProps>(
           .quick-keys-panel {
             display: flex;
             align-items: center;
-            gap: 8px;
-            padding: 8px 12px;
-            padding-left: max(12px, env(safe-area-inset-left, 12px));
-            padding-right: max(12px, env(safe-area-inset-right, 12px));
+            gap: 6px;
+            padding: 6px 10px;
+            padding-left: max(10px, env(safe-area-inset-left, 10px));
+            padding-right: max(10px, env(safe-area-inset-right, 10px));
             background: linear-gradient(180deg, rgba(30, 30, 50, 0.95) 0%, rgba(20, 20, 35, 0.98) 100%);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
@@ -233,14 +182,14 @@ const QuickKeysPanel = forwardRef<QuickKeysPanelRef, QuickKeysPanelProps>(
           }
           .quick-key {
             flex-shrink: 0;
-            min-width: 48px;
-            height: 40px;
-            padding: 0 14px;
+            min-width: 38px;
+            height: 32px;
+            padding: 0 11px;
             background: linear-gradient(180deg, rgba(50, 50, 80, 0.8) 0%, rgba(35, 35, 60, 0.9) 100%);
             border: 1px solid rgba(100, 100, 150, 0.3);
-            border-radius: 10px;
+            border-radius: 8px;
             color: rgba(220, 220, 240, 0.95);
-            font-size: 14px;
+            font-size: 11px;
             font-weight: 500;
             font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
             cursor: pointer;
@@ -260,10 +209,10 @@ const QuickKeysPanel = forwardRef<QuickKeysPanelRef, QuickKeysPanelProps>(
           .quick-key.modifier {
             background: linear-gradient(180deg, rgba(35, 35, 55, 0.8) 0%, rgba(25, 25, 40, 0.9) 100%);
             color: rgba(150, 150, 180, 0.9);
-            font-size: 11px;
+            font-size: 9px;
             font-weight: 600;
             letter-spacing: 0.5px;
-            min-width: 52px;
+            min-width: 42px;
           }
           .quick-key.modifier.active {
             background: linear-gradient(180deg, rgba(74, 144, 226, 0.85) 0%, rgba(50, 100, 180, 0.9) 100%);

@@ -358,7 +358,7 @@ export default function TerminalPage() {
 
       <style jsx>{`
         .session-container {
-          --bottom-nav-height: calc(56px + env(safe-area-inset-bottom, 0px));
+          --bottom-nav-height: calc(50px + env(safe-area-inset-bottom, 0px));
           height: ${isKeyboardVisible ? `${viewportHeight}px` : '100dvh'};
           background: #1a1a2e;
           display: flex;

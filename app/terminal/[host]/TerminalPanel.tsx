@@ -978,8 +978,8 @@ export default function TerminalPanel({
           justify-content: space-between;
           background: rgba(22, 33, 62, 0.95);
           border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-          min-height: 48px;
-          padding: 0 8px;
+          min-height: 43px;
+          padding: 0 7px;
         }
         .tabs-container {
           display: flex;
@@ -988,7 +988,7 @@ export default function TerminalPanel({
           overflow-x: auto;
           -webkit-overflow-scrolling: touch;
           gap: 4px;
-          padding: 6px 0;
+          padding: 5px 0;
         }
         .tabs-container::-webkit-scrollbar {
           display: none;
@@ -996,15 +996,15 @@ export default function TerminalPanel({
         .tab {
           display: flex;
           align-items: center;
-          gap: 8px;
-          padding: 10px 14px;
-          min-height: 36px;
+          gap: 7px;
+          padding: 8px 12px;
+          min-height: 32px;
           background: rgba(255, 255, 255, 0.03);
           border: 1px solid transparent;
-          border-radius: 10px;
+          border-radius: 9px;
           cursor: pointer;
           color: #888;
-          font-size: 0.85rem;
+          font-size: 0.82rem;
           white-space: nowrap;
           transition: all 0.15s;
         }
@@ -1028,14 +1028,14 @@ export default function TerminalPanel({
           display: flex;
           align-items: center;
           justify-content: center;
-          width: 24px;
-          height: 24px;
+          width: 22px;
+          height: 22px;
           background: none;
           border: none;
           color: #666;
           cursor: pointer;
           padding: 0;
-          border-radius: 6px;
+          border-radius: 5px;
           transition: all 0.15s;
         }
         .tab-close:hover {
@@ -1049,13 +1049,13 @@ export default function TerminalPanel({
           display: flex;
           align-items: center;
           justify-content: center;
-          width: 36px;
-          height: 36px;
+          width: 32px;
+          height: 32px;
           background: rgba(255, 255, 255, 0.03);
           border: 1px solid rgba(255, 255, 255, 0.08);
           color: #888;
           cursor: pointer;
-          border-radius: 10px;
+          border-radius: 9px;
           margin-left: 4px;
           transition: all 0.15s;
         }
