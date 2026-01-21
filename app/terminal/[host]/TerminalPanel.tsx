@@ -517,6 +517,19 @@ export default function TerminalPanel({
         let cumulativeY = 0
         let swipeAxis: 'horizontal' | 'vertical' | null = null // Lock to one axis
 
+        // Pinch-to-zoom state
+        let isPinching = false
+        let initialPinchDistance = 0
+        let initialFontSize = 13
+        const MIN_FONT_SIZE = 8
+        const MAX_FONT_SIZE = 32
+
+        const getPinchDistance = (touches: TouchList) => {
+          const dx = touches[0].clientX - touches[1].clientX
+          const dy = touches[0].clientY - touches[1].clientY
+          return Math.sqrt(dx * dx + dy * dy)
+        }
+
         // Arrow key escape codes
         const ARROW_UP = '\x1b[A'
         const ARROW_DOWN = '\x1b[B'
@@ -553,6 +566,17 @@ export default function TerminalPanel({
         }
 
         const onTouchStart = (e: TouchEvent) => {
+          // Handle pinch-to-zoom (two fingers)
+          if (e.touches.length === 2) {
+            e.preventDefault()
+            e.stopPropagation()
+            isPinching = true
+            initialPinchDistance = getPinchDistance(e.touches)
+            initialFontSize = term.options.fontSize || 13
+            gestureTriggered = true
+            return
+          }
+
           const touch = e.touches[0]
           startX = touch.clientX
           startY = touch.clientY
@@ -594,6 +618,22 @@ export default function TerminalPanel({
         }
 
         const onTouchMove = (e: TouchEvent) => {
+          // Handle pinch-to-zoom
+          if (isPinching && e.touches.length === 2) {
+            e.preventDefault()
+            e.stopPropagation()
+            const currentDistance = getPinchDistance(e.touches)
+            const scale = currentDistance / initialPinchDistance
+            let newFontSize = Math.round(initialFontSize * scale)
+            newFontSize = Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, newFontSize))
+
+            if (newFontSize !== term.options.fontSize) {
+              term.options.fontSize = newFontSize
+              fitAddon.fit()
+            }
+            return
+          }
+
           if (gestureModeRef.current) {
             // Gesture mode - prevent and stop to block xterm's handling
             e.preventDefault()
@@ -664,6 +704,17 @@ export default function TerminalPanel({
         }
 
         const onTouchEnd = (e: TouchEvent) => {
+          // Handle pinch-to-zoom end
+          if (isPinching) {
+            isPinching = false
+            // Send resize to server after zoom completes
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }))
+            }
+            term.focus()
+            return
+          }
+
           if (gestureTriggered) {
             // Refocus terminal after gesture
             term.focus()
