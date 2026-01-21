@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="public/icons/icon-192x192.png" alt="Codebook Logo" width="120" height="120">
+  <img src="public/icons/icon-192.png" alt="Codebook Logo" width="120" height="120">
 </p>
 
-<h1 align="center">Codebook</h1>
+<h1 align="center">CodeBook</h1>
 
 <p align="right">
   <img src="https://komarev.com/ghpvc/?username=k-m-irfan&repo=codebook-next&label=Visitors&color=4a7cff&style=flat" alt="Visitors">
