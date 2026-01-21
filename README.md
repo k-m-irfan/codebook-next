@@ -1,6 +1,18 @@
-# Codebook
+<p align="center">
+  <img src="public/icons/icon-192x192.png" alt="Codebook Logo" width="120" height="120">
+</p>
+
+<h1 align="center">Codebook</h1>
+
+<p align="right">
+  <img src="https://komarev.com/ghpvc/?username=k-m-irfan&repo=codebook-next&label=Visitors&color=4a7cff&style=flat" alt="Visitors">
+</p>
 
 A VSCode-like IDE designed for smartphones and tablets. While it works on desktop computers as well, the interface is primarily optimized for mobile form factors with touch-friendly controls and gestures.
+
+<p align="center">
+  <img src="public/preview.gif" alt="Codebook Preview" width="300">
+</p>
 
 ## Features
 
